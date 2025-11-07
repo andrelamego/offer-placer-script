@@ -28,7 +28,7 @@ The project provides a clean, modern GUI to manage product insertions — allowi
 
 ---
 
-##⚙️ Installation
+## ⚙️ Installation
 
 Requirements
 - Python 3.10+
