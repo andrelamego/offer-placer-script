@@ -60,7 +60,7 @@ pip install -r requirements.txt
 
 ## 👨‍💻 Author
 
-André Lamego
+**André Lamego**
 *Eldorado Offer Placer Bot — Smart Offer Automation*
 - GitHub: @andrelamego
 - Email: andreolamego@gmail.com
