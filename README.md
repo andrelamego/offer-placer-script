@@ -43,3 +43,33 @@ cd eldorado-bot
 
 pip install -r requirements.txt
 ```
+
+---
+
+## 🧰 Tech Stack
+
+| Category       | Technology                                                                                                                       |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| GUI            | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)                                                                  |
+| Web Automation | [Selenium](https://www.selenium.dev/) + [undetected_chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver) |
+| Data Handling  | Python CSV module                                                                                                                |
+| Configuration  | JSON                                                                                                                             |
+| Logging        | Console + GUI Textbox                                                                                                            |
+
+---
+
+## 👨‍💻 Author
+
+André Lamego
+*Eldorado Inserter Bot — Smart Offer Automation*
+- GitHub: @yourusername
+- Email: you@example.com
+
+---
+
+## 🌟 Roadmap / Future Improvements
+
+- Implement “Add by Image” mode (automatic image scanning).
+- Direct integration with Eldorado.gg API.
+- Multi-account and multi-user support.
+- Detailed report generation after each insertion.
