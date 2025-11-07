@@ -1,6 +1,6 @@
-# bot_eldorado
+# ELDORADO OFFER PLACER
 
-Small Python bot for automating tasks related to Eldorado (scraping, monitoring, notifications). Purpose is to provide a lightweight, testable codebase that can be adapted to specific workflows.
+Small Python bot for automating offer placing to Eldorado.
 
 ## Features
 - Configurable connectors for web/API access
@@ -9,7 +9,7 @@ Small Python bot for automating tasks related to Eldorado (scraping, monitoring,
 - Basic logging and error handling
 
 ## Requirements
-- Python 3.9+
+- Python 3.11
 - pip
 
 Recommended: use a virtual environment.
@@ -93,10 +93,3 @@ CMD ["python", "-m", "bot_eldorado.main"]
 - Open issues for bugs and feature requests.
 - Create small, focused PRs with tests.
 - Follow repository code style and add documentation for new behavior.
-
-## License
-Specify a license in LICENSE file (e.g., MIT).
-
----
-
-For project-specific details (API endpoints, CLI options), update this README to reflect the actual modules and commands in the repository.
