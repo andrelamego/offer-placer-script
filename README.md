@@ -61,15 +61,13 @@ pip install -r requirements.txt
 ## 👨‍💻 Author
 
 André Lamego
-*Eldorado Inserter Bot — Smart Offer Automation*
-- GitHub: @yourusername
-- Email: you@example.com
+*Eldorado Offer Placer Bot — Smart Offer Automation*
+- GitHub: @andrelamego
+- Email: andreolamego@gmail.com
 
 ---
 
 ## 🌟 Roadmap / Future Improvements
 
 - Implement “Add by Image” mode (automatic image scanning).
-- Direct integration with Eldorado.gg API.
-- Multi-account and multi-user support.
 - Detailed report generation after each insertion.
