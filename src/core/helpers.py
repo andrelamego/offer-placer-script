@@ -11,67 +11,67 @@ from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
+
 from pathlib import Path
+from src.core.models import ItemInsercao
+from src.core.settings import Settings
 
-from webdriver_manager.chrome import ChromeDriverManager
-
-from src.config import CSV_PATH, SITE_URL, TEMPO_ESPERA, SELENIUM_PROFILE, BASE_DIR
+from src.settings.config import CSV_PATH, SITE_URL, TEMPO_ESPERA, SELENIUM_PROFILE, BASE_DIR
 
 
-def carregar_itens():
+def carregar_itens(settings: Settings) -> list[ItemInsercao]:
     """
-    Lê o arquivo CSV no formato:
-    titulo,foto,descricao,quantidade,preco
+    Lê o CSV ativo da inserção atual, no formato:
+    nome,titulo,imgUrl,descricao,quantidade,preco
 
-    A coluna 'descricao' será ignorada, pois usamos uma descrição fixa.
+    - Usa settings.csv_ativo_path como origem;
+    - Constrói caminhos absolutos para as imagens (imgUrl);
+    - Ignora linhas vazias;
+    - Retorna lista de objetos ItemInsercao.
     """
-    itens = []
-    with open(CSV_PATH, newline="", encoding="utf-8") as f:
+    caminho_csv = settings.csv_ativo_path
+    base_dir = caminho_csv.parent.parent  # ex.: data/ -> src/../data/
+
+    if not caminho_csv.exists():
+        return []
+
+    itens: list[ItemInsercao] = []
+
+    with caminho_csv.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-             # caminho que veio do CSV (por ex.: "data\img\losmobilis.png" ou "img\losmobilis.png")
-            raw_foto = row["foto"]
+            if not any(row.values()):
+                continue
 
-            # remove barra inicial se tiver (\data\img -> data\img)
-            raw_foto = raw_foto.lstrip(r"\/")
+            # caminho da imagem (por ex.: "data/img/losmobilis.png" ou "img/losmobilis.png")
+            raw_img = (row.get("imgUrl") or "").strip()
+            raw_img = raw_img.lstrip(r"\/")
 
-            # monta caminho absoluto partindo do BASE_DIR
-            caminho_foto = (BASE_DIR / raw_foto).resolve()
-            
-            itens.append({
-                "titulo": row["titulo"],
-                "foto": str(caminho_foto),
-                "quantidade": row["quantidade"],
-                "preco": row["preco"],
-            })
+            # caminho absoluto (BASE_DIR + caminho relativo)
+            caminho_img = (base_dir / raw_img).resolve()
+
+            # cria o ItemInsercao
+            item = ItemInsercao(
+                nome=(row.get("nome") or "").strip(),
+                titulo=(row.get("titulo") or "").strip(),
+                imgUrl=str(caminho_img),
+                descricao=(row.get("descricao") or "").strip(),
+                quantidade=int(row.get("quantidade") or 0),
+                preco=row.get("preco") or "0.00",
+            )
+
+            itens.append(item)
+
     return itens
 
 
-def abrir_navegador(use_profile: bool = True):
+def abrir_navegador(settings: Settings):
     """
-    Abre o Chrome com webdriver-manager. Se use_profile=True, usa SELENIUM_PROFILE.
-
-    options = webdriver.ChromeOptions()
-
-    if use_profile:
-        # cria a pasta se não existir (Chrome criará arquivos nela)
-        os.makedirs(SELENIUM_PROFILE, exist_ok=True)
-        options.add_argument(f"--user-data-dir={SELENIUM_PROFILE}")
-
-    # remove flags de automação (opcional)
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-    driver.maximize_window()
-
-    # navega para a url
-    driver.get(SITE_URL)
+    Abre o Chrome via undetected-chromedriver.
     """    
     options = uc.ChromeOptions()
     
-    options.user_data_dir = SELENIUM_PROFILE
+    options.user_data_dir = settings.chrome_profile_path
     
     # Desativa o popup "Restaurar páginas"
     options.add_argument("--disable-session-crashed-bubble")
@@ -82,7 +82,6 @@ def abrir_navegador(use_profile: bool = True):
     
     return driver
 
-    
 
 def wait_for_manual_login_prompt():
     """

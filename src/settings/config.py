@@ -3,11 +3,9 @@
 from pathlib import Path
 
 # Caminho base do projeto (pasta onde está este arquivo)
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 IMG_DIR = DATA_DIR / "img"
-
-
 
 # Caminho do CSV com os itens
 CSV_PATH = BASE_DIR / "data" / "items.csv"

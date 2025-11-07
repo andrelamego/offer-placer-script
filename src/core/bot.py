@@ -1,12 +1,19 @@
 # src/bot.py
+from __future__ import annotations
 
 import time
+
+from typing import Callable, Optional
+from src.core.settings import Settings
+from src.core.insercao_service import carregar_insercao
+from src.core.log_insercoes_service import registrar_log_insercao
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from pathlib import Path
 
-from src.config import DESCRICAO_PADRAO
-from src.helpers import (
+from src.settings.config import DESCRICAO_PADRAO
+from src.core.models import ItemInsercao
+from src.core.helpers import (
     carregar_itens,
     abrir_navegador,
     clicar,
@@ -16,8 +23,10 @@ from src.helpers import (
     upload_arquivo,
 )
 
+# type alias: função que bloqueia até o usuário confirmar o login
+WaitForLoginCallback = Callable[[], None]
 
-def navegar_para_formulario(driver, titulo: str):
+def navegar_para_formulario(driver, nome: str):
     """
     Fluxo fixo:
     Clicar em 'Sell' > 'Items' > selecionar jogo 'Steal a brainrot' > 'Next'
@@ -81,7 +90,7 @@ def navegar_para_formulario(driver, titulo: str):
     
     
     # Selecionar brainrot específico "Steal a Brainrot"
-    selecionar_ng_select_com_fallback(driver, 6, titulo, "Other", "Nome do brainrot") #TODO: ajustar nome do item
+    selecionar_ng_select_com_fallback(driver, 6, nome, "Other", "Nome do brainrot") 
     
     clicar(
         driver,
@@ -100,7 +109,7 @@ def selecionar_nome_item(driver, titulo_item: str):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.common.exceptions import TimeoutException, NoSuchElementException
-    from src.config import TEMPO_ESPERA
+    from src.settings.config import TEMPO_ESPERA
     import time
 
     try:
@@ -138,7 +147,7 @@ def selecionar_nome_item(driver, titulo_item: str):
         print("[ERRO] Dropdown do nome do item não encontrado.")
 
 
-def preencher_formulario_item(driver, item: dict):
+def preencher_formulario_item(driver, item: ItemInsercao):
     """
     Preenche o formulário do item:
     - Título
@@ -151,10 +160,10 @@ def preencher_formulario_item(driver, item: dict):
     - Clica em "Place Offer"
     """
 
-    titulo = item["titulo"]
-    foto = str(item["foto"])
-    quantidade = str(item["quantidade"])
-    preco = str(item["preco"])
+    titulo = item.titulo
+    foto = item.imgUrl
+    quantidade = str(item.quantidade)
+    preco = str(item.preco)
 
     # 2) Título
     preencher_campo(
@@ -239,34 +248,57 @@ def preencher_formulario_item(driver, item: dict):
     time.sleep(8)
 
 
-def main():
-    itens = carregar_itens()
-    print(f"\n[INFO] {len(itens)} item(s) carregado(s) do CSV.")
+def executar_bot(wait_for_login_callback: Optional[WaitForLoginCallback] = None) -> None:
+    """
+    Fluxo principal da automação.
+
+    - Carrega itens do CSV ATIVO;
+    - Abre o navegador;
+    - Pausa para login manual:
+      - se wait_for_login_callback for passado, usa o popup da UI;
+      - senão, usa input() no terminal (modo CLI);
+    - Publica itens;
+    - Registra log da inserção.
+    """
+    settings = Settings.load()
+
+    itens = carregar_insercao(settings.csv_ativo_path)
+    print(f"\n[INFO] {len(itens)} item(s) carregado(s) do CSV ativo: {settings.csv_ativo_path}")
 
     if not itens:
-        print("Nenhum item encontrado no CSV. Verifique o arquivo em data/itens.csv.")
+        print(
+            "[WARN] Nenhum item encontrado no CSV ativo.\n"
+            f"Verifique o arquivo em: {settings.csv_ativo_path}\n"
+            "Dica: use a ação 'Nova Inserção' para criar e preencher o CSV antes de rodar o bot."
+        )
         return
 
-    # 1) Abre o navegador (com o profile que você já configurou dentro de abrir_navegador)
-    driver = abrir_navegador()
+    driver = abrir_navegador(settings)
 
-    # 2) PAUSA PARA LOGIN MANUAL (OPÇÃO 1)
-    print("\n[LOGIN] Faça login manualmente no site na janela do navegador que abriu.")
-    print("[LOGIN] Resolva o CAPTCHA (se aparecer) e deixe na tela onde tem o botão 'Sell'.")
-    input("[LOGIN] Quando terminar o login e tudo estiver pronto, pressione ENTER aqui no terminal para continuar... ")
+    # 3) PAUSA PARA LOGIN MANUAL
+    if wait_for_login_callback is not None:
+        # UI (CustomTkinter) vai abrir um popup e só devolver quando o usuário confirmar
+        print("\n[LOGIN] Aguardando confirmação de login pela interface gráfica...")
+        wait_for_login_callback()
+    else:
+        # fallback: modo terminal
+        print("\n[LOGIN] Faça login manualmente no site na janela do navegador que abriu.")
+        print("[LOGIN] Resolva o CAPTCHA (se aparecer) e deixe na tela onde tem o botão 'Sell'.")
+        input("[LOGIN] Quando terminar o login e tudo estiver pronto, pressione ENTER aqui no terminal para continuar... ")
+
+    log_path = None
 
     try:
-        # 3) Fluxo normal: publicar itens
+        total = len(itens)
         for idx, item in enumerate(itens, start=1):
-            print(f"\n=== Publicando item {idx}/{len(itens)}: {item['titulo']} ===")
-            navegar_para_formulario(driver, item['titulo'])
+            print(f"\n=== Publicando item {idx}/{total}: {item.titulo} ===")
+            navegar_para_formulario(driver, item.titulo)
             preencher_formulario_item(driver, item)
-            # Se depois de publicar voltar para outra tela, talvez precise
-            # adaptar aqui como voltar para o início do fluxo.
+
+        log_path = registrar_log_insercao(settings.csv_ativo_path)
+        print(f"\n[LOG] Log da inserção registrado em: {log_path}")
     finally:
         print("\n[INFO] Fechando navegador...")
         driver.quit()
-
-
-if __name__ == "__main__":
-    main()
+        if log_path:
+            print(f"[INFO] Inserção finalizada. Snapshot disponível em: {log_path}")

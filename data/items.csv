@@ -1,3 +1,1 @@
-titulo,foto,descricao,quantidade,preco
-Los Mobilis,data/img/losmobilis.png,IGNORAR,1,200
-Los Combinasionas,data/img/losmobilis.png,IGNORAR,1,200
+nome,titulo,imgUrl,descricao,quantidade,preco
