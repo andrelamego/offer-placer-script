@@ -38,8 +38,8 @@ Requirements
 Clone this repository and install dependencies:
 
 ```bash
-git clone https://github.com/yourusername/eldorado-bot.git
-cd eldorado-bot
+git clone https://github.com/andrelamego/offer-placer-script.git
+cd offer-placer-script
 
 pip install -r requirements.txt
 ```
