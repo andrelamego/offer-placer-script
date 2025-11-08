@@ -67,7 +67,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🌟 Roadmap / Future Improvements
+## Roadmap / Future Improvements
 
 - Implement “Add by Image” mode (automatic image scanning).
 - Detailed report generation after each insertion.
