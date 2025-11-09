@@ -1,4 +1,4 @@
-# 🧩 Eldorado Offer Placer
+# Eldorado Offer Placer
 
 A complete automation tool for creating and publishing **offers (brainrots)** on [Eldorado.gg](https://www.eldorado.gg), built with **Python + Selenium + CustomTkinter**.
 
@@ -6,7 +6,7 @@ The project provides a clean, modern GUI to manage product insertions — allowi
 
 ---
 
-## 🚀 Features
+## Features
 
 - **Modern GUI (CustomTkinter)**
   - Sidebar navigation with **Add Offers** and **Configs** screens.
@@ -28,7 +28,7 @@ The project provides a clean, modern GUI to manage product insertions — allowi
 
 ---
 
-## ⚙️ Installation
+## Installation
 
 Requirements
 - Python 3.10+
@@ -46,7 +46,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🧰 Tech Stack
+## Tech Stack
 
 | Category       | Technology                                                                                                                       |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -58,7 +58,7 @@ pip install -r requirements.txt
 
 ---
 
-## 👨‍💻 Author
+## Author
 
 **André Lamego**
 *Eldorado Offer Placer Bot — Smart Offer Automation*
@@ -67,7 +67,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🌟 Roadmap / Future Improvements
+## Roadmap / Future Improvements
 
 - Implement “Add by Image” mode (automatic image scanning).
 - Detailed report generation after each insertion.
