@@ -87,16 +87,6 @@ pip install -r requirements.txt
 
 ---
 
-##  Author
-
-**André Lamego**  
-Eldorado Offer Placer Bot — Smart Offer Automation
-
-📧 Email: andreolamego@gmail.com  
-🐙 GitHub: [@andrelamego](https://github.com/andrelamego)
-
----
-
 ## 🪪 License
 
 This project is distributed under a **Dual License Model**:
