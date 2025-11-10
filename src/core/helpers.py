@@ -7,6 +7,7 @@ import undetected_chromedriver as uc
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait, Select
@@ -67,22 +68,63 @@ def carregar_itens(settings: Settings) -> list[ItemInsercao]:
 
 def abrir_navegador(settings: Settings):
     """
-    Abre o Chrome via undetected-chromedriver.
-    """    
+    Abre o Chrome via undetected-chromedriver usando o perfil do usuário,
+    mantendo login ativo e evitando o popup 'Restaurar páginas'.
+    """
     options = uc.ChromeOptions()
-    
-    options.user_data_dir = settings.chrome_profile_path
-    
-    # Desativa o popup "Restaurar páginas"
+
+    # ------------------------------
+    # Perfil do usuário (mantém login)
+    # ------------------------------
+    if settings.chrome_profile_path:
+        options.add_argument(f"--user-data-dir={settings.chrome_profile_path}")
+
+    # ------------------------------
+    # Flags para estabilidade e UX
+    # ------------------------------
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--start-maximized")
+    options.add_argument("--no-first-run")
+
+    # Evita o popup "Restaurar páginas"
     options.add_argument("--disable-session-crashed-bubble")
-    
-    driver = uc.Chrome(options=options)
+    options.add_argument("--restore-last-session=false")
+    options.add_argument("--hide-crash-restore-bubble")
+
+    # ------------------------------
+    # Preferências do navegador
+    # ------------------------------
+    prefs = {
+        "session.restore_on_startup": 0,  # não restaura abas antigas
+        "profile.default_content_setting_values.notifications": 2,  # bloqueia notificações
+        "credentials_enable_service": False,
+        "profile.password_manager_enabled": False,
+    }
+    options.add_experimental_option("prefs", prefs)
+
+    # ------------------------------
+    # Logs opcionais
+    # ------------------------------
+    caps = DesiredCapabilities.CHROME.copy()
+    caps["goog:loggingPrefs"] = {"browser": "ALL"}
+
+    # ------------------------------
+    # Inicializa o driver
+    # ------------------------------
+    driver = uc.Chrome(options=options, desired_capabilities=caps)
     driver.maximize_window()
-    
-    time.sleep(2)  # espera o navegador abrir
-    
+
+    # Espera o navegador estabilizar
+    time.sleep(2)
+
     driver.get(SITE_URL)
-    
+
     return driver
 
 

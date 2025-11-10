@@ -5,7 +5,7 @@ import datetime
 from pathlib import Path
 
 # Fallback local
-__fallback_version__ = "0.2.0-alpha"
+__fallback_version__ = "0.3.0-alpha"
 
 
 def get_version() -> str:
