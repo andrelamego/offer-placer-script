@@ -11,6 +11,8 @@ from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 
+from src.core.__version__ import __version__
+from src.core.version import get_version, short_version
 from src.core.settings import Settings
 from src.core.insercao_service import (
     nova_insercao,
@@ -19,6 +21,14 @@ from src.core.insercao_service import (
 )
 from src.core.models import ItemInsercao
 from src.core.bot import executar_bot
+from src.core.license_client import (
+    LicenseConfig,
+    LicenseCheckResult,
+    load_config,
+    save_config,
+    verify_license,
+)
+
 
 
 # =========================
@@ -61,7 +71,7 @@ class BotApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title("Eldorado Placer v0.2.0")
+        self.title(f"Eldorado Placer v{short_version()}")
         self.resizable(False, False)
         self.geometry("850x460")
 
@@ -587,6 +597,173 @@ class ConfigFrame(ctk.CTkFrame):
         self.app.settings.save()
         self.app._log("Configurações salvas.")
         self.app._refresh_main_info()
+        
+        
+
+# ======================================================================
+# Janela de Verificação de Licença
+# ======================================================================
+
+class LicenseWindow(ctk.CTkToplevel):
+    """
+    Janela para digitar e validar a product key com a API de licenças.
+    """
+    def __init__(
+        self,
+        master: ctk.CTk,
+        config: LicenseConfig,
+        on_success,
+    ):
+        super().__init__(master)
+        self.config = config
+        self.on_success = on_success
+
+        self.title("Product Key")
+        self.geometry("420x230")
+        self.resizable(False, False)
+        self.configure(fg_color=PALETTE["content_bg"])
+        self.grab_set()  # modal
+
+        self._build_ui()
+
+    def _build_ui(self):
+        self.columnconfigure(0, weight=1)
+
+        lbl_title = ctk.CTkLabel(
+            self,
+            text="Enter your license key",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=PALETTE["text_primary"],
+        )
+        lbl_title.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="n")
+
+        self.entry_key = ctk.CTkEntry(
+            self,
+            width=360,
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
+            placeholder_text="XXXX-XXXX-XXXX-XXXX",
+        )
+        self.entry_key.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
+
+        # se já tinha uma key salva, mostra
+        if self.config.license_key:
+            self.entry_key.insert(0, self.config.license_key)
+
+        self.lbl_status = ctk.CTkLabel(
+            self,
+            text="",
+            text_color=PALETTE["danger"],
+        )
+        self.lbl_status.grid(row=2, column=0, padx=20, pady=(4, 0), sticky="w")
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.grid(row=3, column=0, pady=20)
+
+        btn_ok = ctk.CTkButton(
+            btn_frame,
+            text="Activate",
+            command=self._on_activate,
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
+            text_color="black",
+            width=110,
+        )
+        btn_ok.pack(side="left", padx=5)
+
+        btn_cancel = ctk.CTkButton(
+            btn_frame,
+            text="Exit",
+            command=self._on_cancel,
+            fg_color=PALETTE["muted"],
+            hover_color=PALETTE["muted_hover"],
+            text_color=PALETTE["text_primary"],
+            width=110,
+        )
+        btn_cancel.pack(side="left", padx=5)
+
+    # ---------------- callbacks ----------------
+    def _set_status(self, text: str):
+        self.lbl_status.configure(text=text)
+
+    def _on_cancel(self):
+        self.grab_release()
+        self.master.destroy()
+
+    def _on_activate(self):
+        key = self.entry_key.get().strip()
+        if not key:
+            self._set_status("Please enter a key.")
+            return
+
+        self._set_status("Checking key with server...")
+        self.update_idletasks()
+
+        result: LicenseCheckResult = verify_license(key, self.config.client_id)
+
+        if not result.valid:
+            reason = result.reason or "unknown_error"
+
+            if reason.startswith("network_error"):
+                msg = "Could not contact license server.\nCheck your internet."
+            elif reason == "not found":
+                msg = "Key not found."
+            elif reason == "expired":
+                msg = "This key has expired."
+            elif reason == "bound_to_another_client":
+                msg = "This key is already in use on another device."
+            else:
+                msg = f"Invalid key. Reason: {reason}"
+
+            self._set_status(msg)
+            return
+
+        # sucesso → salvar key no config
+        self.config.license_key = key
+        save_config(self.config)
+
+        if self.on_success:
+            self.on_success(key)
+
+        self.grab_release()
+        self.destroy()
+
+
+
+def ensure_valid_license(master: ctk.CTk) -> bool:
+    """
+    Garante que existe uma key válida para este client_id.
+    Usa 'master' (BotApp) como janela pai para popups/modais.
+    """
+    cfg: LicenseConfig = load_config()
+
+    # 1) Se já tem key salva, checa primeiro
+    if cfg.license_key:
+        result = verify_license(cfg.license_key, cfg.client_id)
+        if result.valid:
+            return True
+
+        if result.reason and str(result.reason).startswith("network_error"):
+            messagebox.showerror(
+                "License error",
+                "Could not contact the license server.\n"
+                "Please check your internet connection and try again.",
+                parent=master,
+            )
+            return False
+        # outros motivos (expired, bound_to_another_client, etc) → cai pro fluxo de pedir nova key
+
+    # 2) Abre janela modal para digitar/ativar nova key
+    done = {"ok": False}
+
+    def _on_success(_key: str):
+        done["ok"] = True
+
+    win = LicenseWindow(master, cfg, on_success=_on_success)
+    master.wait_window(win)  # roda loop local até a janela fechar
+
+    return done["ok"]
+
 
 
 # ======================================================================
@@ -1018,8 +1195,21 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
 
 
 # ----------------------------------------------------------------------
-# Execução direta
+# Execução direta (com verificação de licença)
 # ----------------------------------------------------------------------
-if __name__ == "__main__":
+def main():
+    apply_widget_colors()
+
     app = BotApp()
+
+    # antes de mostrar a janela, garante licença válida
+    if not ensure_valid_license(app):
+        if app.winfo_exists():
+            app.destroy()
+        return
+
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()
