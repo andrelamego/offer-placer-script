@@ -78,6 +78,9 @@ def abrir_navegador(settings: Settings):
     
     driver = uc.Chrome(options=options)
     driver.maximize_window()
+    
+    time.sleep(2)  # espera o navegador abrir
+    
     driver.get(SITE_URL)
     
     return driver

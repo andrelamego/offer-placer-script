@@ -292,7 +292,7 @@ def executar_bot(wait_for_login_callback: Optional[WaitForLoginCallback] = None)
         total = len(itens)
         for idx, item in enumerate(itens, start=1):
             print(f"\n=== Publicando item {idx}/{total}: {item.titulo} ===")
-            navegar_para_formulario(driver, item.titulo)
+            navegar_para_formulario(driver, item.nome)
             preencher_formulario_item(driver, item)
 
         log_path = registrar_log_insercao(settings.csv_ativo_path)

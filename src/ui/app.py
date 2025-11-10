@@ -61,7 +61,7 @@ class BotApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title("ELDORADADO PLACER - Made by: andrelamego")
+        self.title("Eldorado Placer v0.2.0")
         self.resizable(False, False)
         self.geometry("850x460")
 
