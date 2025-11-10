@@ -37,7 +37,7 @@ It provides a **modern, elegant GUI** and full automation for posting offers —
 - Buttons to reset to default or save configuration changes.
 
 ###  License Key System (API Integration)
-- License-based activation through an external API ([license-api](github.com/andrelamego/license-api)).  
+- License-based activation through an external API ([license-api](https://github.com/andrelamego/license-api)).  
 - Automatically registers your device (`consumer_id`) on first use.  
 - Each key becomes bound to one device upon activation.  
 - On startup, the app verifies key validity before running.
