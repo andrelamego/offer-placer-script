@@ -1,40 +1,57 @@
-# Eldorado Offer Placer
+# 🪙 Eldorado Offer Placer
 
-A complete automation tool for creating and publishing **offers (brainrots)** on [Eldorado.gg](https://www.eldorado.gg), built with **Python + Selenium + CustomTkinter**.
+**Eldorado Offer Placer** is a complete automation tool for creating and publishing offers (*brainrots*) on [Eldorado.gg](https://www.eldorado.gg), built with **Python + Selenium + CustomTkinter**.
 
-The project provides a clean, modern GUI to manage product insertions — allowing you to create new offer batches, automatically fill the website forms, and keep timestamped CSV logs of every insertion made.
-
----
-
-## Features
-
-- **Modern GUI (CustomTkinter)**
-  - Sidebar navigation with **Add Offers** and **Configs** screens.
-  - “Add Brainrots” form with validation and optional default description.
-- **Automated Posting (Selenium + undetected_chromedriver)**
-  - Automatically opens Chrome with your saved profile.
-  - Pauses for manual login with confirmation popup.
-  - Publishes all offers listed in the active `.csv` file.
-- **Insertion System**
-  - Each insertion is a batch of offers inside one CSV (`data/itens.csv`).
-  - Previous insertions are saved automatically as timestamped logs (`data/logs/`).
-- **Smart Form**
-  - If a brainrot with the same name already exists, quantity is incremented instead of duplicated.
-  - Checkbox to use or disable a default description.
-  - Strict field validation (integer quantity, decimal price).
-- **Persistent Settings**
-  - Saves Chrome profile path and default description in `data/config.json`.
-  - Buttons to reset to defaults or save configuration.
+It provides a **modern, elegant GUI** and full automation for posting offers — from creation to publishing — all while managing CSV logs and validating license keys securely.
 
 ---
 
-## Installation
+##  Features
 
-Requirements
-- Python 3.10+
-- Google Chrome installed
-- Compatible ChromeDriver (handled automatically via undetected_chromedriver)
+###  Modern GUI (CustomTkinter)
+- Sidebar navigation with **Add Offers** and **Configs** screens.  
+- “**Add Brainrots**” form with validation and optional default description.  
+- Persistent settings saved locally in `data/config.json`.  
+- Non-editable log console inside the app.
 
+###  Automated Posting (Selenium + undetected_chromedriver)
+- Launches Chrome using your saved profile automatically.  
+- **Login confirmation popup** before continuing automation.  
+- Posts all offers found in the active `.csv` file seamlessly.
+
+###  Insertion System
+- Each insertion is a **batch of offers** inside one CSV (`data/itens.csv`).  
+- Previous insertions are archived automatically in timestamped logs (`data/logs/`).  
+- **Smart merge:** if a brainrot with the same name already exists, its quantity is incremented instead of duplicated.
+
+###  Smart Form
+- Checkbox to enable or disable the **default description**.  
+- Strict input validation:
+  - Quantity → integers only  
+  - Price → decimals only  
+
+###  Persistent Settings
+- Save and reload:
+  - Chrome profile path  
+  - Default offer description  
+- Buttons to reset to default or save configuration changes.
+
+###  License Key System (API Integration)
+- License-based activation through an external API ([license-api](github.com/andrelamego/license-api)).  
+- Automatically registers your device (`consumer_id`) on first use.  
+- Each key becomes bound to one device upon activation.  
+- On startup, the app verifies key validity before running.
+
+---
+
+##  Installation
+
+### Requirements
+- Python **3.10+**  
+- **Google Chrome** installed  
+- Compatible **ChromeDriver** (handled automatically via `undetected_chromedriver`)
+
+### Setup
 Clone this repository and install dependencies:
 
 ```bash
@@ -44,30 +61,70 @@ cd offer-placer-script
 pip install -r requirements.txt
 ```
 
----
+##  Tech Stack
 
-## Tech Stack
-
-| Category       | Technology                                                                                                                       |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| GUI            | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)                                                                  |
-| Web Automation | [Selenium](https://www.selenium.dev/) + [undetected_chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver) |
-| Data Handling  | Python CSV module                                                                                                                |
-| Configuration  | JSON                                                                                                                             |
-| Logging        | Console + GUI Textbox                                                                                                            |
-
----
-
-## Author
-
-**André Lamego**
-*Eldorado Offer Placer Bot — Smart Offer Automation*
-- GitHub: @andrelamego
-- Email: andreolamego@gmail.com
+|Category|Technology|
+|---|---|
+|GUI|CustomTkinter|
+|Web Automation|Selenium + undetected_chromedriver|
+|Data Handling|Python CSV module|
+|Configuration|JSON|
+|Logging|Console + GUI Textbox|
+|License Management|FastAPI + PostgreSQL (Railway)|
 
 ---
 
-## Roadmap / Future Improvements
+##  Roadmap / Future Improvements
 
-- Implement “Add by Image” mode (automatic image scanning).
-- Detailed report generation after each insertion.
+-  Implement “Add by Image” mode (automatic image scanning).
+    
+-  Generate detailed reports after each insertion.
+    
+-  Cloud sync for settings and logs.
+    
+-  Multi-user license dashboard (admin panel).
+    
+
+---
+
+##  Author
+
+**André Lamego**  
+Eldorado Offer Placer Bot — Smart Offer Automation
+
+📧 Email: andreolamego@gmail.com  
+🐙 GitHub: [@andrelamego](https://github.com/andrelamego)
+
+---
+
+## 🪪 License
+
+This project is distributed under a **Dual License Model**:
+
+### 🔹 Open Source (MIT License)
+You are free to use, modify, and distribute this software for **personal or educational** purposes, under the standard terms of the [MIT License](LICENSE).
+
+### 🔸 Commercial Use (Proprietary License)
+Any **commercial use**, resale, or integration into paid products, SaaS platforms, or closed-source systems **requires a commercial license agreement** with the author.
+
+For commercial inquiries or licensing requests, please contact:
+
+📧 **andreolamego@gmail.com**  
+🐙 **[@andrelamego](https://github.com/andrelamego)**
+
+---
+
+**Summary:**
+
+| ✅ Allowed (MIT) | ❌ Restricted (Commercial) |
+|------------------|----------------------------|
+| Personal use | Selling or reselling the app |
+| Educational use | Integration into paid tools |
+| Forks and open contributions | Removing license validation |
+| Custom modifications | Rebranding or closed-source redistribution |
+
+---
+
+© 2025 **André Lamego** — *Eldorado Offer Placer*  
+Licensed under **Dual License (MIT + Proprietary)**  
+Commercial use requires explicit authorization.

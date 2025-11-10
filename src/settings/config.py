@@ -1,4 +1,7 @@
-# src/config.py
+# Eldorado Offer Placer
+# Copyright (c) 2025 André Lamego
+# Licensed under Dual License (MIT + Proprietary)
+# For commercial use, contact: andreolamego@gmail.com
 
 from pathlib import Path
 

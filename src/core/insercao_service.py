@@ -1,4 +1,8 @@
-# core/insercao_service.py
+# Eldorado Offer Placer
+# Copyright (c) 2025 André Lamego
+# Licensed under Dual License (MIT + Proprietary)
+# For commercial use, contact: andreolamego@gmail.com
+
 from __future__ import annotations
 
 import csv
