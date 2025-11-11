@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import platform
+import traceback
 import subprocess
 import threading
 import tkinter as tk
@@ -512,6 +513,7 @@ class ConfigFrame(ctk.CTkFrame):
         self.app = app
 
         self.entry_profile: ctk.CTkEntry | None = None
+        self.entry_csv: ctk.CTkEntry | None = None
         self.txt_descricao_padrao: ctk.CTkTextbox | None = None
 
         self._build_ui()
@@ -529,20 +531,7 @@ class ConfigFrame(ctk.CTkFrame):
 
         # Chrome profile
         row_profile = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
-        row_profile.pack(fill="x", **padding)
-
-        ctk.CTkLabel(
-            row_profile,
-            text="Chrome Profile Path:",
-            text_color=PALETTE["text_secondary"],
-        ).pack(side="left", padx=5)
-        self.entry_profile = ctk.CTkEntry(
-            row_profile,
-            width=380,
-            fg_color=PALETTE["entry_bg"],
-            text_color=PALETTE["text_primary"],
-        )
-        self.entry_profile.pack(side="left", padx=5)
+        row_profile.pack(fill="x", **padding)        
 
         btn_escolher_profile = ctk.CTkButton(
             row_profile,
@@ -553,25 +542,72 @@ class ConfigFrame(ctk.CTkFrame):
             hover_color=PALETTE["muted_hover"],
             text_color=PALETTE["text_primary"],
         )
-        btn_escolher_profile.pack(side="left", padx=5)
+        btn_escolher_profile.pack(side="right", padx=5)
+        
+        self.entry_profile = ctk.CTkEntry(
+            row_profile,
+            width=380,
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
+        )
+        self.entry_profile.pack(side="right", padx=5)
+        
+        ctk.CTkLabel(
+            row_profile,
+            text="Chrome Profile Path:",
+            text_color=PALETTE["text_secondary"],
+        ).pack(side="right", padx=5)
+        
+        # CSV path
+        row_csv = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
+        row_csv.pack(fill="x", **padding)
 
-        # Default description
+        btn_escolher_csv = ctk.CTkButton(
+            row_csv,
+            text="Browse",
+            width=80,
+            command=self._choose_csv_file,
+            fg_color=PALETTE["muted"],
+            hover_color=PALETTE["muted_hover"],
+            text_color=PALETTE["text_primary"],
+        )
+        btn_escolher_csv.pack(side="right", padx=5)
+        
+        self.entry_csv = ctk.CTkEntry(
+            row_csv,
+            width=380,
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
+        )
+        self.entry_csv.pack(side="right", padx=5)
+        
+        ctk.CTkLabel(
+            row_csv,
+            text="CSV File Path:",
+            text_color=PALETTE["text_secondary"],
+        ).pack(side="right", padx=5)
+
+        # Default description (label + textbox on same row)
         row_desc = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
-        row_desc.pack(fill="both", expand=True, **padding)
+        row_desc.pack(fill="x", expand=False, **padding)
 
+        self.txt_descricao_padrao = ctk.CTkTextbox(
+            row_desc,
+            width=390,
+            height=220,
+            border_width=2,
+            border_color=PALETTE["entry_border"],
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
+        )
+        self.txt_descricao_padrao.pack(side="right", padx=(5, 10), pady=10, fill="x", expand=True)
+        
         ctk.CTkLabel(
             row_desc,
             text="Default Description:",
             text_color=PALETTE["text_secondary"],
-        ).pack(anchor="w", padx=5, pady=(10, 5))
-
-        self.txt_descricao_padrao = ctk.CTkTextbox(
-            row_desc,
-            height=220,
-            fg_color=PALETTE["entry_bg"],
-            text_color=PALETTE["text_primary"],
-        )
-        self.txt_descricao_padrao.pack(fill="both", expand=True, padx=5, pady=5)
+            anchor="n",
+        ).pack(anchor="n", side="right", padx=(10, 5), pady=13)
 
         # Reset / Save buttons
         frame_btns = ctk.CTkFrame(self, fg_color=PALETTE["content_bg"])
@@ -598,12 +634,16 @@ class ConfigFrame(ctk.CTkFrame):
         btn_save.pack(side="right", padx=20)
 
     def load_from_settings(self):
-        """Load current Settings values into the fields."""
-        if not self.entry_profile or not self.txt_descricao_padrao:
+        """Load current Settings values into fields."""
+        if not self.entry_profile or not self.txt_descricao_padrao or not self.entry_csv:
             return
 
         self.entry_profile.delete(0, "end")
-        self.entry_profile.insert(0, str(self.app.settings.chrome_profile_path))
+        if self.app.settings.chrome_profile_path:
+            self.entry_profile.insert(0, str(self.app.settings.chrome_profile_path))
+
+        self.entry_csv.delete(0, "end")
+        self.entry_csv.insert(0, str(self.app.settings.csv_ativo_path))
 
         self.txt_descricao_padrao.delete("1.0", "end")
         self.txt_descricao_padrao.insert("1.0", self.app.settings.descricao_padrao)
@@ -618,6 +658,29 @@ class ConfigFrame(ctk.CTkFrame):
         if d and self.entry_profile:
             self.entry_profile.delete(0, "end")
             self.entry_profile.insert(0, d)
+            
+    def _choose_csv_file(self):
+        from pathlib import Path
+
+        initial = (
+            str(self.app.settings.csv_ativo_path.parent)
+            if self.app.settings.csv_ativo_path
+            else "."
+        )
+        path = filedialog.asksaveasfilename(
+            title="Select CSV file",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialdir=initial,
+            initialfile=(
+                self.app.settings.csv_ativo_path.name
+                if self.app.settings.csv_ativo_path
+                else "items.csv"
+            ),
+        )
+        if path and self.entry_csv:
+            self.entry_csv.delete(0, "end")
+            self.entry_csv.insert(0, path)
 
     def _on_reset_default(self):
         defaults = Settings.defaults()
@@ -634,21 +697,63 @@ class ConfigFrame(ctk.CTkFrame):
         self.app._refresh_main_info()
 
     def _on_save(self):
-        if not self.entry_profile or not self.txt_descricao_padrao:
+        if not self.entry_profile or not self.txt_descricao_padrao or not self.entry_csv:
             return
 
-        profile = self.entry_profile.get().strip()
+        profile_str = self.entry_profile.get().strip()
         descricao = self.txt_descricao_padrao.get("1.0", "end").strip()
+        csv_path_str = self.entry_csv.get().strip()
 
-        if profile:
-            self.app.settings.chrome_profile_path = Path(profile)
-        self.app.settings.descricao_padrao = (
-            descricao or self.app.settings.descricao_padrao
-        )
+        from pathlib import Path
 
-        self.app.settings.save()
-        self.app._log("Settings saved.")
-        self.app._refresh_main_info()
+        # valida CSV primeiro
+        if not csv_path_str:
+            messagebox.showerror(
+                "Invalid CSV path",
+                "Please select a valid CSV file path.",
+                parent=self,
+            )
+            return
+
+        try:
+            # Chrome profile
+            if profile_str:
+                self.app.settings.chrome_profile_path = Path(profile_str)
+            else:
+                self.app.settings.chrome_profile_path = None
+
+            # CSV path
+            csv_path = Path(csv_path_str)
+            if csv_path.suffix.lower() != ".csv":
+                if not messagebox.askyesno(
+                    "CSV extension",
+                    "The selected path does not end with .csv.\nDo you want to use it anyway?",
+                    parent=self,
+                ):
+                    return
+
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            self.app.settings.csv_ativo_path = csv_path
+
+            # default description
+            if descricao.strip():
+                self.app.settings.descricao_padrao = descricao.strip()
+
+            # salva
+            self.app._log(
+                f"Saving settings... chrome_profile_path={self.app.settings.chrome_profile_path}"
+            )
+            self.app.settings.save()
+            self.app._log("Settings saved.")
+            self.app._refresh_main_info()
+
+        except Exception as e:
+            messagebox.showerror(
+                "Error saving settings",
+                f"An error occurred while saving settings:\n{e}",
+                parent=self,
+            )
+            self.app._log(f"[ERROR] Failed to save settings: {e}")
 
 
 # ======================================================================
@@ -813,6 +918,216 @@ def ensure_valid_license(master: ctk.CTk) -> bool:
     master.wait_window(win)  # local loop until the window is closed
 
     return done["ok"]
+
+# ======================================================================
+# Initial Config Window
+# ======================================================================
+class InitialSetupWindow(ctk.CTkToplevel):
+    """
+    First-run setup window to choose CSV path and Chrome profile path.
+    """
+    def __init__(self, master: BotApp, settings: Settings, on_done):
+        super().__init__(master)
+        self.master = master
+        self.settings = settings
+        self.on_done = on_done
+
+        self.title("Initial Setup")
+        self.geometry("520x260")
+        self.resizable(False, False)
+        self.configure(fg_color=PALETTE["content_bg"])
+        self.grab_set()
+
+        self.entry_csv: ctk.CTkEntry | None = None
+        self.entry_profile: ctk.CTkEntry | None = None
+
+        self._build_ui()
+
+    def _build_ui(self):
+        padding = {"padx": 20, "pady": 8}
+
+        title = ctk.CTkLabel(
+            self,
+            text="Initial Setup",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=PALETTE["text_primary"],
+        )
+        title.pack(anchor="w", padx=20, pady=(15, 5))
+
+        subtitle = ctk.CTkLabel(
+            self,
+            text="Choose where to store your CSV file and Chrome profile.",
+            text_color=PALETTE["text_secondary"],
+        )
+        subtitle.pack(anchor="w", padx=20, pady=(0, 10))
+
+        # CSV path row
+        row_csv = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
+        row_csv.pack(fill="x", **padding)
+
+        btn_csv = ctk.CTkButton(
+            row_csv,
+            text="Browse",
+            width=70,
+            command=self._choose_csv_file,
+            fg_color=PALETTE["muted"],
+            hover_color=PALETTE["muted_hover"],
+            text_color=PALETTE["text_primary"],
+        )
+        btn_csv.pack(side="right", padx=5)
+        
+        self.entry_csv = ctk.CTkEntry(
+            row_csv,
+            width=260,
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
+        )
+        self.entry_csv.pack(side="right", padx=5)
+        
+        ctk.CTkLabel(
+            row_csv,
+            text="CSV File Path:",
+            text_color=PALETTE["text_secondary"],
+        ).pack(side="right", padx=5)
+
+        # default/value from settings
+        default_csv = str(self.settings.csv_ativo_path)
+        self.entry_csv.insert(0, default_csv)
+        
+        #------------------------------------------------------------
+        # Chrome profile row
+        row_profile = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
+        row_profile.pack(fill="x", **padding)
+
+        btn_profile = ctk.CTkButton(
+            row_profile,
+            text="Browse",
+            width=70,
+            command=self._choose_profile_dir,
+            fg_color=PALETTE["muted"],
+            hover_color=PALETTE["muted_hover"],
+            text_color=PALETTE["text_primary"],
+        )
+        btn_profile.pack(side="right", padx=5)
+        
+        self.entry_profile = ctk.CTkEntry(
+            row_profile,
+            width=260,
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
+        )
+        self.entry_profile.pack(side="right", padx=5)
+        
+        ctk.CTkLabel(
+            row_profile,
+            text="Chrome Profile Path:",
+            text_color=PALETTE["text_secondary"],
+        ).pack(side="right", padx=5)
+
+        default_profile = (
+            str(self.settings.chrome_profile_path)
+            if self.settings.chrome_profile_path
+            else ""
+        )
+        self.entry_profile.insert(0, default_profile)
+
+        # Buttons
+        btn_row = ctk.CTkFrame(self, fg_color=PALETTE["content_bg"])
+        btn_row.pack(fill="x", padx=20, pady=(15, 15))
+
+        btn_cancel = ctk.CTkButton(
+            btn_row,
+            text="Exit",
+            fg_color=PALETTE["muted"],
+            hover_color=PALETTE["muted_hover"],
+            text_color=PALETTE["text_primary"],
+            command=self._on_cancel,
+            width=110,
+        )
+        btn_cancel.pack(side="left")
+
+        btn_ok = ctk.CTkButton(
+            btn_row,
+            text="Continue",
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
+            text_color="black",
+            command=self._on_confirm,
+            width=120,
+        )
+        btn_ok.pack(side="right")
+
+    def _choose_csv_file(self):
+        initial = (
+            str(self.settings.csv_ativo_path.parent)
+            if self.settings.csv_ativo_path
+            else "."
+        )
+        path = filedialog.asksaveasfilename(
+            title="Select CSV file",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialdir=initial,
+            initialfile=self.settings.csv_ativo_path.name
+            if self.settings.csv_ativo_path
+            else "items.csv",
+        )
+        if path and self.entry_csv:
+            self.entry_csv.delete(0, "end")
+            self.entry_csv.insert(0, path)
+
+    def _choose_profile_dir(self):
+        initial = (
+            str(self.settings.chrome_profile_path)
+            if self.settings.chrome_profile_path
+            else "."
+        )
+        d = filedialog.askdirectory(
+            title="Select Chrome profile folder",
+            initialdir=initial,
+        )
+        if d and self.entry_profile:
+            self.entry_profile.delete(0, "end")
+            self.entry_profile.insert(0, d)
+
+    def _on_cancel(self):
+        # user aborted setup → close app
+        self.grab_release()
+        self.master.destroy()
+
+    def _on_confirm(self):
+        from pathlib import Path
+
+        csv_str = self.entry_csv.get().strip() if self.entry_csv else ""
+        profile_str = self.entry_profile.get().strip() if self.entry_profile else ""
+
+        if not csv_str:
+            messagebox.showerror(
+                "Invalid CSV path",
+                "Please choose a valid CSV file path.",
+                parent=self,
+            )
+            return
+
+        csv_path = Path(csv_str)
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.settings.csv_ativo_path = csv_path
+
+        if profile_str:
+            self.settings.chrome_profile_path = Path(profile_str)
+        else:
+            self.settings.chrome_profile_path = None
+
+        # mark setup as done and save
+        self.settings.initial_setup_done = True
+        self.settings.save()
+
+        if self.on_done:
+            self.on_done()
+
+        self.grab_release()
+        self.destroy()
 
 
 # ======================================================================
@@ -1240,6 +1555,30 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
 
         if self.start_bot_callback:
             self.start_bot_callback()
+            
+            
+def ensure_initial_paths(app: BotApp) -> bool:
+        """
+        Ensures the initial CSV and Chrome profile paths are configured.
+        Shows a first-run setup window if needed.
+        """
+        settings = app.settings
+
+        # Se já rodou o setup uma vez, não faz nada.
+        if getattr(settings, "initial_setup_done", False):
+            return True
+
+        done = {"ok": False}
+
+        def _on_done():
+            done["ok"] = True
+            # atualizar tela principal (paths podem ter mudado)
+            app._refresh_main_info()
+
+        win = InitialSetupWindow(app, settings, on_done=_on_done)
+        app.wait_window(win)
+
+        return done["ok"]
 
 
 # ----------------------------------------------------------------------
@@ -1247,19 +1586,24 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
 # ----------------------------------------------------------------------
 def main():
     apply_widget_colors()
-    BotApp.set_global_font()
 
     app = BotApp()
-    
-    
 
-    # before showing the window, ensure a valid license
+    # 1) Verifica licença
     if not ensure_valid_license(app):
         if app.winfo_exists():
             app.destroy()
         return
 
+    # 2) Setup inicial de paths (primeira execução)
+    if not ensure_initial_paths(app):
+        if app.winfo_exists():
+            app.destroy()
+        return
+
+    # 3) Agora mantém a janela principal visível normalmente
     app.mainloop()
+
 
 if __name__ == "__main__":
     main()
