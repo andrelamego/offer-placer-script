@@ -17,6 +17,7 @@ from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 
+from src.core.brainrots_data import BRAINROT_NAMES
 from src.core.version import get_version, short_version
 from src.core.settings import Settings
 from src.core.insercao_service import (
@@ -59,7 +60,7 @@ PALETTE = {
     # components
     "card_bg": "#414141",
     "entry_bg": "#414141",
-    "entry_border": "#2F2F2F",
+    "entry_border": "#555555",
     "log_bg": "#414141",
 }
 
@@ -1130,6 +1131,155 @@ class InitialSetupWindow(ctk.CTkToplevel):
         self.destroy()
 
 
+class AutocompleteEntry(ctk.CTkEntry):
+    def __init__(
+        self,
+        master,
+        suggestions: list[str],
+        on_select=None,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(master, *args, **kwargs)
+        self.suggestions = suggestions
+        self.on_select = on_select  # <- callback ao selecionar
+
+        self._dropdown = None
+        self._listbox = None
+
+        self.bind("<KeyRelease>", self._on_keyrelease)
+        self.bind("<Down>", self._on_down)
+        self.bind("<Return>", self._on_return)
+        self.bind("<FocusOut>", self._on_focus_out)
+
+        # estilo do dropdown
+        self.dropdown_bg = "#2F2F2F"
+        self.dropdown_border = "#2F2F2F"
+        self.dropdown_text = "#F9FAFB"
+        self.dropdown_select_bg = "#E5A000"
+        self.dropdown_select_fg = "#000000"
+
+    # --------------------------------------------------
+    # helpers de dropdown / listbox
+    # --------------------------------------------------
+    def _create_dropdown(self):
+        if self._dropdown is not None:
+            return
+
+        self._dropdown = tk.Toplevel(self)
+        self._dropdown.wm_overrideredirect(True)
+        self._dropdown.configure(bg=self.dropdown_border)
+
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        self._dropdown.geometry(f"+{x}+{y}")
+
+        frame = tk.Frame(self._dropdown, bg=self.dropdown_border, bd=2)
+        frame.pack(fill="both", expand=True)
+
+        self._listbox = tk.Listbox(
+            frame,
+            height=6,
+            borderwidth=0,
+            highlightthickness=0,
+            background=self.dropdown_bg,
+            foreground=self.dropdown_text,
+            selectbackground=self.dropdown_select_bg,
+            selectforeground=self.dropdown_select_fg,
+            relief="flat",
+            font=("Segoe UI", 11),
+        )
+        self._listbox.pack(fill="both", expand=True, padx=4, pady=3)
+
+        self._listbox.bind("<<ListboxSelect>>", self._on_listbox_click)
+        self._listbox.bind("<ButtonRelease-1>", self._on_listbox_click)
+
+    def _destroy_dropdown(self):
+        if self._dropdown is not None:
+            self._dropdown.destroy()
+            self._dropdown = None
+            self._listbox = None
+
+    # --------------------------------------------------
+    # eventos
+    # --------------------------------------------------
+    def _on_keyrelease(self, event):
+        if event.keysym in ("Return", "Up", "Down"):
+            return
+
+        text = self.get().strip()
+        if not text:
+            self._destroy_dropdown()
+            return
+
+        # filtro por "contains", case-insensitive
+        lowercase = text.lower()
+        matches = [
+            s for s in self.suggestions
+            if lowercase in s.lower()
+        ]
+
+        if not matches:
+            self._destroy_dropdown()
+            return
+
+        self._create_dropdown()
+        self._listbox.delete(0, tk.END)
+        for item in matches:
+            # padding lateral
+            self._listbox.insert(tk.END, f"  {item}  ")
+
+        self._listbox.selection_clear(0, tk.END)
+        self._listbox.selection_set(0)
+        self._listbox.activate(0)
+
+    def _on_down(self, event):
+        if self._listbox is None:
+            return "break"
+        cur = self._listbox.curselection()
+        if not cur:
+            idx = 0
+        else:
+            idx = cur[0] + 1
+        if idx >= self._listbox.size():
+            idx = self._listbox.size() - 1
+        self._listbox.selection_clear(0, tk.END)
+        self._listbox.selection_set(idx)
+        self._listbox.activate(idx)
+        return "break"
+
+    def _on_return(self, event):
+        if self._listbox is not None:
+            self._apply_selection()
+            return "break"
+
+    def _on_focus_out(self, event):
+        # fecha dropdown quando perde foco
+        self.after(150, self._destroy_dropdown)
+
+    def _on_listbox_click(self, event):
+        self._apply_selection()
+
+    # --------------------------------------------------
+    # seleção de item
+    # --------------------------------------------------
+    def _apply_selection(self):
+        if self._listbox is None:
+            return
+        cur = self._listbox.curselection()
+        if not cur:
+            return
+
+        text = self._listbox.get(cur[0]).strip()
+        self.delete(0, tk.END)
+        self.insert(0, text)
+        self._destroy_dropdown()
+
+        # dispara callback opcional para notificar quem selecionou
+        if callable(self.on_select):
+            self.on_select(text)
+
+
 # ======================================================================
 # New Insert Window (Add Brainrots)
 # ======================================================================
@@ -1215,22 +1365,29 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
     def _build_formulario_manual(self):
         padding = {"padx": 10, "pady": 5}
 
-        # Name
+        # Name (com autocomplete)
         row_nome = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
-        self.entry_nome = ctk.CTkEntry(
+        row_nome.pack(fill="x", **padding)
+
+        # cria o entry com autocomplete e callback
+        self.entry_nome = AutocompleteEntry(
             row_nome,
+            suggestions=BRAINROT_NAMES,
+            on_select=self._on_brainrot_selected,
             width=450,
             fg_color=PALETTE["entry_bg"],
             text_color=PALETTE["text_primary"],
         )
         self.entry_nome.pack(side="right", padx=(5, 10), pady=(10, 0))
-        row_nome.pack(fill="x", **padding)
+
         ctk.CTkLabel(
             row_nome, text="Name:", text_color=PALETTE["text_secondary"]
         ).pack(side="right", padx=5)
 
-        # Title
+        # Title (entrada normal)
         row_titulo = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
+        row_titulo.pack(fill="x", **padding)
+
         self.entry_titulo = ctk.CTkEntry(
             row_titulo,
             width=450,
@@ -1238,7 +1395,7 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
             text_color=PALETTE["text_primary"],
         )
         self.entry_titulo.pack(side="right", padx=(5, 10))
-        row_titulo.pack(fill="x", **padding)
+
         ctk.CTkLabel(
             row_titulo, text="Title:", text_color=PALETTE["text_secondary"]
         ).pack(side="right", padx=5)
@@ -1381,6 +1538,15 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
             command=self._on_adicionar_mais,
         )
         btn_adicionar_mais.pack(side="right", padx=(10, 5))
+        
+    def _on_brainrot_selected(self, name: str):
+        """
+        Called when the user selects a brainrot from the autocomplete
+        in the Name field. Mirrors the same text to the Title field.
+        """
+        if hasattr(self, "entry_titulo") and self.entry_titulo is not None:
+            self.entry_titulo.delete(0, "end")
+            self.entry_titulo.insert(0, name)
 
     # ---------------------- validation ----------------------
     def _validate_int(self, new_value: str) -> bool:

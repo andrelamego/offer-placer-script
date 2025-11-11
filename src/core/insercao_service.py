@@ -100,18 +100,16 @@ def adicionar_ou_incrementar_item(
     caminho_csv: PathLike, novo_item: ItemInsercao
 ) -> ItemInsercao:
     """
-    Adiciona um novo item à inserção OU incrementa quantidade se já
-    existir item 'igual', segundo ItemInsercao.identity_key().
+    Adds a new item to the insertion OR increments the quantity if an item
+    with the same identity_key() (currently: same TITLE, case-insensitive) already exists.
 
-    Critério atual: MESMO nome (case-insensitive).
-
-    Fluxo:
-    - Carrega itens existentes;
-    - Procura por item com mesma identity_key();
-    - Se encontrar: incrementa quantidade;
-    - Se não: adiciona novo_item;
-    - Salva tudo de volta no mesmo CSV;
-    - Retorna o item resultante (já atualizado).
+    Flow:
+    - Loads existing items from the CSV;
+    - Compares identity_key() (defined in ItemInsercao);
+    - If a match is found → increments its quantity;
+    - Otherwise → appends the new item;
+    - Saves everything back to the CSV;
+    - Returns the resulting (possibly merged) item.
     """
     caminho = _to_path(caminho_csv)
     itens = carregar_insercao(caminho)
@@ -119,12 +117,13 @@ def adicionar_ou_incrementar_item(
     novo_key = novo_item.identity_key()
     item_encontrado: ItemInsercao | None = None
 
+    # look for an existing item with the same title (via identity_key)
     for item in itens:
         if item.identity_key() == novo_key:
             item_encontrado = item
             break
 
-    if item_encontrado is not None:
+    if item_encontrado:
         item_encontrado.quantidade += novo_item.quantidade
         item_resultante = item_encontrado
     else:

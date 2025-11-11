@@ -99,4 +99,4 @@ class ItemInsercao:
         Se no futuro você quiser incluir titulo, pode mudar para:
         return (self.nome.strip().lower(), self.titulo.strip().lower())
         """
-        return (self.nome.strip().lower(),)
+        return (self.nome.strip().lower(), self.titulo.strip().lower())

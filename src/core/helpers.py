@@ -144,7 +144,8 @@ def clicar(driver, by: By, seletor: str, descricao: str = "elemento"):
     """
     Espera o elemento ficar clicável e clica.
     """
-    time.sleep(0.5)
+    
+    time.sleep(0.1)
     
     elem = WebDriverWait(driver, TEMPO_ESPERA).until(
         EC.element_to_be_clickable((by, seletor))
@@ -166,7 +167,6 @@ def selecionar_ng_select(driver, indice: int, texto_opcao: str, descricao: str =
         selecionar_ng_select(driver, 2, "Brainrot", "tipo de item")
         selecionar_ng_select(driver, 3, "Secret", "raridade")
     """
-    time.sleep(0.5)
     
     # 1) Abre o combobox (ng-select) pela posição
     xpath_container = f"(//div[contains(@class,'ng-select-container')])[{indice}]"
@@ -211,7 +211,7 @@ def selecionar_ng_select_com_fallback(driver, indice: int, texto_opcao: str, fal
     from selenium.webdriver.support import expected_conditions as EC
     import time
 
-    time.sleep(0.5)
+    time.sleep(0.1)
 
     # Abre o combobox
     xpath_container = f"(//div[contains(@class,'ng-select-container')])[{indice}]"
@@ -261,7 +261,7 @@ def upload_arquivo(driver, by: By, seletor: str, caminho_arquivo: str, descricao
     Funciona mesmo que o input esteja hidden.
     Faz checagem de caminho e imprime erros úteis.
     """
-    time.sleep(0.5)  # pequeno delay se a UI for animada
+    time.sleep(0.2)  # pequeno delay se a UI for animada
 
     caminho = Path(caminho_arquivo)
     if not caminho.is_absolute():
@@ -299,7 +299,7 @@ def preencher_campo(driver, by: By, seletor: str, valor: str, limpar: bool = Tru
     """
     Espera o campo ficar visível, opcionalmente limpa e preenche com 'valor'.
     """
-    time.sleep(0.5)
+    time.sleep(0.1)
     
     elem = WebDriverWait(driver, TEMPO_ESPERA).until(
         EC.visibility_of_element_located((by, seletor))
@@ -315,7 +315,7 @@ def selecionar_dropdown_por_texto(driver, by: By, seletor: str, texto: str, desc
     """
     Localiza um <select> e escolhe a opção pelo texto visível.
     """
-    time.sleep(0.5)
+    time.sleep(0.2)
     
     elem = WebDriverWait(driver, TEMPO_ESPERA).until(
         EC.presence_of_element_located((by, seletor))
