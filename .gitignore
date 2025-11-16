@@ -1,0 +1,76 @@
+########################
+# Python / Build
+########################
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.log
+
+build/
+dist/
+*.egg-info/
+*.spec
+
+########################
+# Virtualenv
+########################
+.venv/
+venv/
+env/
+
+########################
+# IDE / Editor
+########################
+.vscode/
+.idea/
+*.code-workspace
+
+########################
+# OS files
+########################
+.DS_Store
+Thumbs.db
+
+########################
+# App data / runtime
+########################
+
+# Tests
+src/tests/
+
+# CSVs de inserção / dados locais
+*.csv
+!docs/*.csv
+
+# Logs gerados pelo app
+logs/
+log/
+*.log
+
+# Imagens temporárias de brainrots (recortes)
+data/brainrots_temp/
+
+# Outras pastas de dados locais (se existirem)
+dataset/
+data/tmp/
+tmp/
+temp/
+
+########################
+# Selenium / Drivers
+########################
+drivers/
+chromedriver*
+msedgedriver*
+
+########################
+# Config / Segredos
+########################
+
+# Arquivos de configuração com chave de licença ou URLs
+.env
+.env.*
+*.local.json
+config.local.*
+license_config.json

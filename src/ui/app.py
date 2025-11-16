@@ -7,26 +7,27 @@ from __future__ import annotations
 
 import os
 import platform
-import traceback
 import subprocess
 import threading
 import tkinter as tk
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import customtkinter as ctk
-from tkinter import messagebox, filedialog
+from tkinter import filedialog, messagebox
 
-from src.core.brainrots_data import BRAINROT_NAMES
-from src.core.version import get_version, short_version
-from src.core.settings import Settings
+from src.core.bot import executar_bot
 from src.core.insercao_service import (
     nova_insercao,
     adicionar_ou_incrementar_item,
     carregar_insercao,
 )
+from src.core.brainrots_data import BRAINROT_NAMES
+from src.core.brainrot_image_extractor import BrainrotOCRResult, extrair_brainrot
+from src.ui.brainrot_selection_window import BrainrotSelectionWindow, SelectedRegion
+from src.ui.brainrot_review_window import BrainrotReviewWindow
 from src.core.models import ItemInsercao
-from src.core.bot import executar_bot
+from src.core.settings import Settings
+from src.core.version import short_version
 from src.core.license_client import (
     LicenseConfig,
     LicenseCheckResult,
@@ -34,7 +35,6 @@ from src.core.license_client import (
     save_config,
     verify_license,
 )
-
 
 # =========================
 # PALETTE / THEME
@@ -64,12 +64,16 @@ PALETTE = {
     "log_bg": "#414141",
 }
 
+
 def apply_widget_colors():
     """Global CTk theme configuration."""
     ctk.set_appearance_mode("dark")
-    # no pre-made theme to keep manual control over colors
+    # mantemos as cores manualmente via PALETTE
 
 
+# ======================================================================
+# Main App
+# ======================================================================
 class BotApp(ctk.CTk):
     """Main window with sidebar menu and Add Offers / Configs screens."""
 
@@ -107,11 +111,6 @@ class BotApp(ctk.CTk):
     # ------------------------------------------------------------------
     # Main layout: sidebar + content area
     # ------------------------------------------------------------------
-    def set_global_font(family="Segoe UI", size=13):
-        """Aplica uma fonte global em todos os widgets CustomTkinter."""
-        ctk.ThemeManager.theme["CTkFont"]["family"] = "Segoe UI"
-        # ctk.ThemeManager.theme["CTkFont"]["size"] = size
-    
     def _build_layout(self):
         # main container
         container = ctk.CTkFrame(self, fg_color=PALETTE["bg"])
@@ -161,7 +160,7 @@ class BotApp(ctk.CTk):
 
         lbl_logo = ctk.CTkLabel(
             sidebar,
-            text="ELDORADADO PLACER",
+            text="ELDORADO PLACER",
             font=ctk.CTkFont(size=14, weight="bold"),
             justify="center",
             text_color=PALETTE["text_secondary"],
@@ -175,7 +174,6 @@ class BotApp(ctk.CTk):
             corner_radius=0,
         )
         content.pack(side="left", fill="both", expand=True)
-
         self.content = content
 
         # instantiate screens, but only show one at a time
@@ -193,9 +191,7 @@ class BotApp(ctk.CTk):
             self.add_offers_frame.pack(fill="both", expand=True)
             self.add_offers_frame.update_info()
 
-        # highlight button
         self._highlight_sidebar_button(self.btn_add_offers)
-
 
     def show_configs(self):
         """Show Configs screen and update button highlight."""
@@ -205,9 +201,8 @@ class BotApp(ctk.CTk):
             self.config_frame.pack(fill="both", expand=True)
             self.config_frame.load_from_settings()
 
-        # highlight button
         self._highlight_sidebar_button(self.btn_configs)
-        
+
     def _highlight_sidebar_button(self, active_button):
         """Updates sidebar button colors to show which screen is active."""
         # Reset all buttons
@@ -232,15 +227,6 @@ class BotApp(ctk.CTk):
     # ------------------------------------------------------------------
     # Global actions (called by screens)
     # ------------------------------------------------------------------
-    def open_insertion_window(self):
-        """Opens the New Insert window (brainrots form)."""
-        NovaInsercaoWindow(
-            master=self,
-            settings=self.settings,
-            start_bot_callback=self._rodar_bot_thread,
-            refresh_main_callback=self._refresh_main_info,
-        )
-
     def clear_csv_file(self):
         """Clears the active CSV file (new empty insertion)."""
         csv_path = nova_insercao(self.settings)
@@ -289,7 +275,6 @@ class BotApp(ctk.CTk):
             executar_bot(wait_for_login_callback=self._wait_for_login_popup_blocking)
             self._log("Automation finished successfully.")
             self._refresh_main_info()
-            # popup after insertion is done
             self.after(
                 0,
                 lambda: messagebox.showinfo(
@@ -348,9 +333,7 @@ class BotApp(ctk.CTk):
         def on_close():
             event.set()
             popup.destroy()
-            self._log(
-                "[LOGIN] Login popup closed. Continuing flow anyway."
-            )
+            self._log("[LOGIN] Login popup closed. Continuing flow anyway.")
 
         popup.protocol("WM_DELETE_WINDOW", on_close)
 
@@ -371,6 +354,7 @@ class AddOffersFrame(ctk.CTkFrame):
     def __init__(self, master, app: BotApp):
         super().__init__(master, fg_color=PALETTE["content_bg"])
         self.app = app
+        self.settings = app.settings
 
         self.lbl_selected_file: ctk.CTkLabel | None = None
         self.lbl_items: ctk.CTkLabel | None = None
@@ -378,6 +362,9 @@ class AddOffersFrame(ctk.CTkFrame):
 
         self._build_ui()
 
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
     def _build_ui(self):
         # Title
         lbl_title = ctk.CTkLabel(
@@ -456,23 +443,51 @@ class AddOffersFrame(ctk.CTkFrame):
             fg_color=PALETTE["log_bg"],
             text_color=PALETTE["text_primary"],
         )
-        self.txt_logs.pack(fill="x", padx=20, pady=(5, 20))
+        self.txt_logs.pack(fill="x", padx=20, pady=(5, 10))
         self.txt_logs.configure(state="disabled")
 
-        # Add Brainrots button
-        btn_add = ctk.CTkButton(
-            self,
-            text="Add Brainrots",
-            command=self._on_add_brainrots_clicked,
-            width=180,
+        # Actions row: Add by Image / Add Manually / Start Posting
+        actions = ctk.CTkFrame(self, fg_color=PALETTE["content_bg"])
+        actions.pack(fill="x", padx=20, pady=(0, 10))
+
+        btn_add_image = ctk.CTkButton(
+            actions,
+            text="Add by Image",
+            width=160,
             fg_color=PALETTE["accent"],
             hover_color=PALETTE["accent_hover"],
             text_color="black",
+            command=self._on_add_by_image,
         )
-        btn_add.pack(anchor="e", padx=20, pady=(0, 20))
+        btn_add_image.pack(side="right", padx=(10, 0), pady=(0, 10))
+
+        btn_add_manual = ctk.CTkButton(
+            actions,
+            text="Add Manually",
+            width=160,
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
+            text_color="black",
+            command=self._open_manual_window,
+        )
+        btn_add_manual.pack(side="right", padx=(10, 0), pady=(0, 10))
+
+        btn_start = ctk.CTkButton(
+            actions,
+            text="Start Posting",
+            width=160,
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
+            text_color="black",
+            command=self._on_start_posting,
+        )
+        btn_start.pack(side="left", padx=(0, 10), pady=(0, 10))
 
         self.update_info()
 
+    # ------------------------------------------------------------------
+    # Info / logs
+    # ------------------------------------------------------------------
     def update_info(self):
         """Updates selected file label and item count."""
         if not self.lbl_selected_file or not self.lbl_items:
@@ -493,17 +508,179 @@ class AddOffersFrame(ctk.CTkFrame):
     def append_log(self, message: str):
         if not self.txt_logs:
             return
-        # habilita temporariamente para escrever
         self.txt_logs.configure(state="normal")
         self.txt_logs.insert(tk.END, f"{message}\n")
         self.txt_logs.see(tk.END)
-        # volta para read-only
         self.txt_logs.configure(state="disabled")
 
-    def _on_add_brainrots_clicked(self):
-        self.app._log("Opening insertion form (New Insert)...")
-        self.app.open_insertion_window()
+    # ------------------------------------------------------------------
+    # Start Posting
+    # ------------------------------------------------------------------
+    def _on_start_posting(self):
+        self.app._log("Starting insertion flow (bot)...")
+        self.app._rodar_bot_thread()
 
+    # ------------------------------------------------------------------
+    # Add by Image (mesmo fluxo antigo da NovaInsercaoWindow)
+    # ------------------------------------------------------------------
+    def _on_add_by_image(self):
+        import cv2
+
+        # 1) Escolhe a imagem com os brainrots
+        file_path = filedialog.askopenfilename(
+            title="Select screenshot with brainrots",
+            filetypes=[
+                ("Images", "*.png *.jpg *.jpeg *.webp"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not file_path:
+            return
+
+        # 2) Carrega a imagem inteira
+        img_bgr = cv2.imread(file_path)
+        if img_bgr is None:
+            messagebox.showerror("Error", "Could not open the selected image.")
+            return
+
+        # Pasta para recortes temporários
+        output_dir = Path("data/brainrots_temp")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        def _on_regions_selected(regions: list[SelectedRegion]):
+            from decimal import Decimal
+
+            brainrots_detectados: list[BrainrotOCRResult] = []
+
+            for i, region in enumerate(regions, start=1):
+                x1 = int(region.x1)
+                y1 = int(region.y1)
+                x2 = int(region.x2)
+                y2 = int(region.y2)
+
+                h, w = img_bgr.shape[:2]
+                x1 = max(0, min(x1, w - 1))
+                x2 = max(0, min(x2, w))
+                y1 = max(0, min(y1, h - 1))
+                y2 = max(0, min(y2, h))
+
+                if x2 <= x1 or y2 <= y1:
+                    continue
+
+                crop = img_bgr[y1:y2, x1:x2]
+                crop_path = output_dir / f"brainrot_{i}.png"
+                cv2.imwrite(str(crop_path), crop)
+
+                result = extrair_brainrot(crop_path)
+                brainrots_detectados.append(result)
+
+            if not brainrots_detectados:
+                messagebox.showinfo(
+                    "Warning",
+                    "No valid brainrots were selected.",
+                    parent=self,
+                )
+                return
+
+            def _on_review_done(reviewed_items: list[dict]):
+                """
+                Cada item:
+                {
+                    "name": str,
+                    "variation": str,
+                    "gen_per_s": str,
+                    "title": str,
+                    "use_default_desc": bool,
+                    "description": str,
+                    "quantity": int,
+                    "price": float,
+                    "image_path": str,
+                }
+                """
+                from src.core.insercao_service import adicionar_ou_incrementar_item
+
+                for data in reviewed_items:
+                    nome = (data.get("name") or "").strip()
+                    if not nome:
+                        continue
+
+                    variation = (data.get("variation") or "").strip()
+                    titulo = (data.get("title") or "").strip()
+                    if not titulo:
+                        base = (nome + (" " + variation if variation else "")).strip()
+                        titulo = base
+
+                    use_default_desc = bool(data.get("use_default_desc", False))
+                    if use_default_desc:
+                        descricao = "DEFAULT"
+                    else:
+                        descricao = (data.get("description") or "").strip() or "DEFAULT"
+
+                    try:
+                        quantidade = int(data.get("quantity", 1) or 1)
+                    except Exception:
+                        quantidade = 1
+                    if quantidade <= 0:
+                        quantidade = 1
+
+                    try:
+                        preco = Decimal(str(data.get("price", "0.00")))
+                    except Exception:
+                        preco = Decimal("0.00")
+
+                    img_url = data.get("image_path", "")
+
+                    item = ItemInsercao(
+                        nome=nome,
+                        titulo=titulo,
+                        imgUrl=img_url,
+                        descricao=descricao,
+                        quantidade=quantidade,
+                        preco=preco,
+                    )
+
+                    adicionar_ou_incrementar_item(self.app.settings.csv_ativo_path, item)
+                    self.app._log(
+                        f"[Image Insert] '{item.titulo}' (x{item.quantidade}) added from screenshot."
+                    )
+
+                self.update_info()
+
+            # Abre o wizard de revisão (1 brainrot por vez + resumo final)
+            BrainrotReviewWindow(
+                master=self.app,
+                brainrots=brainrots_detectados,
+                default_description=self.settings.descricao_padrao,
+                on_done=_on_review_done,
+            )
+
+        # 3) Abre a janela de seleção das regiões na screenshot
+        BrainrotSelectionWindow(
+            self.app,
+            file_path,
+            on_done=_on_regions_selected,
+        )
+
+    # ------------------------------------------------------------------
+    # Manual form (mesmo formulário, sem Start Posting)
+    # ------------------------------------------------------------------
+    def _open_manual_window(self):
+        AddManualWindow(
+            master=self.app,
+            settings=self.app.settings,
+            on_add=self._on_manual_add_item,
+            on_finish=self._on_manual_finish,
+        )
+    
+    def _on_manual_add_item(self, item: ItemInsercao):
+        from src.core.insercao_service import adicionar_ou_incrementar_item
+        adicionar_ou_incrementar_item(self.app.settings.csv_ativo_path, item)
+        self.app._log(f"[Manual Insert] '{item.nome}' added.")
+        self.update_info()
+
+    def _on_manual_finish(self):
+        self.app._log("Manual insertion finished.")
+        self.update_info()
 
 # ======================================================================
 # Screen 2: Configs
@@ -532,7 +709,7 @@ class ConfigFrame(ctk.CTkFrame):
 
         # Chrome profile
         row_profile = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
-        row_profile.pack(fill="x", **padding)        
+        row_profile.pack(fill="x", **padding)
 
         btn_escolher_profile = ctk.CTkButton(
             row_profile,
@@ -544,7 +721,7 @@ class ConfigFrame(ctk.CTkFrame):
             text_color=PALETTE["text_primary"],
         )
         btn_escolher_profile.pack(side="right", padx=5)
-        
+
         self.entry_profile = ctk.CTkEntry(
             row_profile,
             width=380,
@@ -552,13 +729,13 @@ class ConfigFrame(ctk.CTkFrame):
             text_color=PALETTE["text_primary"],
         )
         self.entry_profile.pack(side="right", padx=5)
-        
+
         ctk.CTkLabel(
             row_profile,
             text="Chrome Profile Path:",
             text_color=PALETTE["text_secondary"],
         ).pack(side="right", padx=5)
-        
+
         # CSV path
         row_csv = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
         row_csv.pack(fill="x", **padding)
@@ -573,7 +750,7 @@ class ConfigFrame(ctk.CTkFrame):
             text_color=PALETTE["text_primary"],
         )
         btn_escolher_csv.pack(side="right", padx=5)
-        
+
         self.entry_csv = ctk.CTkEntry(
             row_csv,
             width=380,
@@ -581,14 +758,14 @@ class ConfigFrame(ctk.CTkFrame):
             text_color=PALETTE["text_primary"],
         )
         self.entry_csv.pack(side="right", padx=5)
-        
+
         ctk.CTkLabel(
             row_csv,
             text="CSV File Path:",
             text_color=PALETTE["text_secondary"],
         ).pack(side="right", padx=5)
 
-        # Default description (label + textbox on same row)
+        # Default description
         row_desc = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
         row_desc.pack(fill="x", expand=False, **padding)
 
@@ -601,8 +778,10 @@ class ConfigFrame(ctk.CTkFrame):
             fg_color=PALETTE["entry_bg"],
             text_color=PALETTE["text_primary"],
         )
-        self.txt_descricao_padrao.pack(side="right", padx=(5, 10), pady=10, fill="x", expand=True)
-        
+        self.txt_descricao_padrao.pack(
+            side="right", padx=(5, 10), pady=10, fill="x", expand=True
+        )
+
         ctk.CTkLabel(
             row_desc,
             text="Default Description:",
@@ -659,10 +838,8 @@ class ConfigFrame(ctk.CTkFrame):
         if d and self.entry_profile:
             self.entry_profile.delete(0, "end")
             self.entry_profile.insert(0, d)
-            
-    def _choose_csv_file(self):
-        from pathlib import Path
 
+    def _choose_csv_file(self):
         initial = (
             str(self.app.settings.csv_ativo_path.parent)
             if self.app.settings.csv_ativo_path
@@ -705,9 +882,6 @@ class ConfigFrame(ctk.CTkFrame):
         descricao = self.txt_descricao_padrao.get("1.0", "end").strip()
         csv_path_str = self.entry_csv.get().strip()
 
-        from pathlib import Path
-
-        # valida CSV primeiro
         if not csv_path_str:
             messagebox.showerror(
                 "Invalid CSV path",
@@ -740,7 +914,6 @@ class ConfigFrame(ctk.CTkFrame):
             if descricao.strip():
                 self.app.settings.descricao_padrao = descricao.strip()
 
-            # salva
             self.app._log(
                 f"Saving settings... chrome_profile_path={self.app.settings.chrome_profile_path}"
             )
@@ -760,11 +933,11 @@ class ConfigFrame(ctk.CTkFrame):
 # ======================================================================
 # License Window
 # ======================================================================
-
 class LicenseWindow(ctk.CTkToplevel):
     """
     Window to type and validate the product key with the license API.
     """
+
     def __init__(
         self,
         master: ctk.CTk,
@@ -780,6 +953,9 @@ class LicenseWindow(ctk.CTkToplevel):
         self.resizable(False, False)
         self.configure(fg_color=PALETTE["content_bg"])
         self.grab_set()  # modal
+
+        self.entry_key: ctk.CTkEntry | None = None
+        self.lbl_status: ctk.CTkLabel | None = None
 
         self._build_ui()
 
@@ -803,7 +979,6 @@ class LicenseWindow(ctk.CTkToplevel):
         )
         self.entry_key.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
 
-        # if there was already a saved key, show it
         if self.config.license_key:
             self.entry_key.insert(0, self.config.license_key)
 
@@ -841,13 +1016,17 @@ class LicenseWindow(ctk.CTkToplevel):
 
     # ---------------- callbacks ----------------
     def _set_status(self, text: str):
-        self.lbl_status.configure(text=text)
+        if self.lbl_status:
+            self.lbl_status.configure(text=text)
 
     def _on_cancel(self):
         self.grab_release()
         self.master.destroy()
 
     def _on_activate(self):
+        if not self.entry_key:
+            return
+
         key = self.entry_key.get().strip()
         if not key:
             self._set_status("Please enter a key.")
@@ -907,7 +1086,6 @@ def ensure_valid_license(master: ctk.CTk) -> bool:
                 parent=master,
             )
             return False
-        # other reasons (expired, bound_to_another_client, etc) → open key prompt
 
     # 2) open modal window to type/activate new key
     done = {"ok": False}
@@ -920,6 +1098,7 @@ def ensure_valid_license(master: ctk.CTk) -> bool:
 
     return done["ok"]
 
+
 # ======================================================================
 # Initial Config Window
 # ======================================================================
@@ -927,6 +1106,7 @@ class InitialSetupWindow(ctk.CTkToplevel):
     """
     First-run setup window to choose CSV path and Chrome profile path.
     """
+
     def __init__(self, master: BotApp, settings: Settings, on_done):
         super().__init__(master)
         self.master = master
@@ -976,7 +1156,7 @@ class InitialSetupWindow(ctk.CTkToplevel):
             text_color=PALETTE["text_primary"],
         )
         btn_csv.pack(side="right", padx=5)
-        
+
         self.entry_csv = ctk.CTkEntry(
             row_csv,
             width=260,
@@ -984,18 +1164,16 @@ class InitialSetupWindow(ctk.CTkToplevel):
             text_color=PALETTE["text_primary"],
         )
         self.entry_csv.pack(side="right", padx=5)
-        
+
         ctk.CTkLabel(
             row_csv,
             text="CSV File Path:",
             text_color=PALETTE["text_secondary"],
         ).pack(side="right", padx=5)
 
-        # default/value from settings
         default_csv = str(self.settings.csv_ativo_path)
         self.entry_csv.insert(0, default_csv)
-        
-        #------------------------------------------------------------
+
         # Chrome profile row
         row_profile = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
         row_profile.pack(fill="x", **padding)
@@ -1010,7 +1188,7 @@ class InitialSetupWindow(ctk.CTkToplevel):
             text_color=PALETTE["text_primary"],
         )
         btn_profile.pack(side="right", padx=5)
-        
+
         self.entry_profile = ctk.CTkEntry(
             row_profile,
             width=260,
@@ -1018,7 +1196,7 @@ class InitialSetupWindow(ctk.CTkToplevel):
             text_color=PALETTE["text_primary"],
         )
         self.entry_profile.pack(side="right", padx=5)
-        
+
         ctk.CTkLabel(
             row_profile,
             text="Chrome Profile Path:",
@@ -1092,13 +1270,10 @@ class InitialSetupWindow(ctk.CTkToplevel):
             self.entry_profile.insert(0, d)
 
     def _on_cancel(self):
-        # user aborted setup → close app
         self.grab_release()
         self.master.destroy()
 
     def _on_confirm(self):
-        from pathlib import Path
-
         csv_str = self.entry_csv.get().strip() if self.entry_csv else ""
         profile_str = self.entry_profile.get().strip() if self.entry_profile else ""
 
@@ -1120,7 +1295,6 @@ class InitialSetupWindow(ctk.CTkToplevel):
         else:
             self.settings.chrome_profile_path = None
 
-        # mark setup as done and save
         self.settings.initial_setup_done = True
         self.settings.save()
 
@@ -1131,6 +1305,9 @@ class InitialSetupWindow(ctk.CTkToplevel):
         self.destroy()
 
 
+# ======================================================================
+# AutocompleteEntry (Name field)
+# ======================================================================
 class AutocompleteEntry(ctk.CTkEntry):
     def __init__(
         self,
@@ -1142,10 +1319,10 @@ class AutocompleteEntry(ctk.CTkEntry):
     ):
         super().__init__(master, *args, **kwargs)
         self.suggestions = suggestions
-        self.on_select = on_select  # <- callback ao selecionar
+        self.on_select = on_select  # callback ao selecionar
 
-        self._dropdown = None
-        self._listbox = None
+        self._dropdown: tk.Toplevel | None = None
+        self._listbox: tk.Listbox | None = None
 
         self.bind("<KeyRelease>", self._on_keyrelease)
         self.bind("<Down>", self._on_down)
@@ -1212,21 +1389,17 @@ class AutocompleteEntry(ctk.CTkEntry):
             self._destroy_dropdown()
             return
 
-        # filtro por "contains", case-insensitive
         lowercase = text.lower()
-        matches = [
-            s for s in self.suggestions
-            if lowercase in s.lower()
-        ]
+        matches = [s for s in self.suggestions if lowercase in s.lower()]
 
         if not matches:
             self._destroy_dropdown()
             return
 
         self._create_dropdown()
+        assert self._listbox is not None
         self._listbox.delete(0, tk.END)
         for item in matches:
-            # padding lateral
             self._listbox.insert(tk.END, f"  {item}  ")
 
         self._listbox.selection_clear(0, tk.END)
@@ -1254,7 +1427,6 @@ class AutocompleteEntry(ctk.CTkEntry):
             return "break"
 
     def _on_focus_out(self, event):
-        # fecha dropdown quando perde foco
         self.after(150, self._destroy_dropdown)
 
     def _on_listbox_click(self, event):
@@ -1275,122 +1447,82 @@ class AutocompleteEntry(ctk.CTkEntry):
         self.insert(0, text)
         self._destroy_dropdown()
 
-        # dispara callback opcional para notificar quem selecionou
         if callable(self.on_select):
             self.on_select(text)
 
-
-# ======================================================================
-# New Insert Window (Add Brainrots)
-# ======================================================================
-class NovaInsercaoWindow(ctk.CTkToplevel):
+class AddManualWindow(ctk.CTkToplevel):
     """
-    Window to add brainrots (New Insert).
+    Janela simples para adicionar itens manualmente.
+    Possui:
+    - Name (autocomplete)
+    - Title
+    - Image
+    - Use Default Description (checkbox)
+    - Description (habilita/desabilita)
+    - Quantity
+    - Price
+
+    Botões:
+    - Cancel
+    - Add More
+    - Finish
     """
 
-    def __init__(
-        self,
-        master: BotApp,
-        settings: Settings,
-        start_bot_callback,
-        refresh_main_callback,
-    ):
+    def __init__(self, master, settings, on_add, on_finish):
         super().__init__(master)
-        self.master: BotApp = master
         self.settings = settings
-        self.start_bot_callback = start_bot_callback
-        self.refresh_main_callback = refresh_main_callback
+        self.on_add = on_add       # callback(ItemInsercao)
+        self.on_finish = on_finish # callback()
 
-        self.title("New Insert")
-        self.geometry("605x580")
-        self.resizable(False, False)
+        self.title("Add Manually")
+        self.geometry("520x580")
         self.configure(fg_color=PALETTE["content_bg"])
         self.grab_set()
+        self.resizable(False, False)
 
         self.use_default_desc_var = ctk.BooleanVar(value=True)
 
-        self._create_widgets()
+        self._build_ui()
 
-    def _create_widgets(self):
-        lbl_title = ctk.CTkLabel(
-            self,
-            text="New Insert",
-            font=ctk.CTkFont(size=20, weight="bold"),
-            text_color=PALETTE["text_primary"],
-        )
-        lbl_title.pack(pady=(10, 15))
-
-        # mode options
-        self.frame_opcoes = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
-        self.frame_opcoes.pack(fill="x", padx=20, pady=10)
-
-        lbl_modo = ctk.CTkLabel(
-            self.frame_opcoes,
-            text="How do you want to add the brainrots?",
-            text_color=PALETTE["text_secondary"],
-        )
-        lbl_modo.pack(pady=(5, 0))
-
-        btns_opcoes = ctk.CTkFrame(self.frame_opcoes, fg_color=PALETTE["card_bg"])
-        btns_opcoes.pack(pady=5)
-
-        self.btn_por_imagem = ctk.CTkButton(
-            btns_opcoes,
-            text="Add by Image (Soon)",
-            state="disabled",
-            command=self._on_adicionar_por_imagem,
-            width=220,
-            height=40,
-            fg_color=PALETTE["muted"],
-            hover_color=PALETTE["muted_hover"],
-            text_color=PALETTE["text_primary"],
-        )
-        self.btn_por_imagem.pack(side="left", padx=10, pady=5)
-
-        self.btn_manual = ctk.CTkButton(
-            btns_opcoes,
-            text="Add Manually",
-            command=self._mostrar_formulario_manual,
-            width=220,
-            height=40,
-            fg_color=PALETTE["accent"],
-            hover_color=PALETTE["accent_hover"],
-            text_color="black",
-        )
-        self.btn_manual.pack(side="left", padx=10, pady=5)
-
-        self.frame_form = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
-        self._build_formulario_manual()
-
-    def _build_formulario_manual(self):
+    def _build_ui(self):
         padding = {"padx": 10, "pady": 5}
 
-        # Name (com autocomplete)
-        row_nome = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
+        title = ctk.CTkLabel(
+            self,
+            text="Add Brainrot Manually",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=PALETTE["text_primary"],
+        )
+        title.pack(pady=(10, 10))
+
+        frame = ctk.CTkFrame(self, fg_color=PALETTE["card_bg"])
+        frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # NAME
+        row_nome = ctk.CTkFrame(frame, fg_color=PALETTE["card_bg"])
         row_nome.pack(fill="x", **padding)
 
-        # cria o entry com autocomplete e callback
         self.entry_nome = AutocompleteEntry(
             row_nome,
             suggestions=BRAINROT_NAMES,
             on_select=self._on_brainrot_selected,
-            width=450,
+            width=380,
             fg_color=PALETTE["entry_bg"],
             text_color=PALETTE["text_primary"],
         )
-        self.entry_nome.pack(side="right", padx=(5, 10), pady=(10, 0))
+        self.entry_nome.pack(side="right", padx=(5, 10))
 
         ctk.CTkLabel(
             row_nome, text="Name:", text_color=PALETTE["text_secondary"]
         ).pack(side="right", padx=5)
 
-        # Title (entrada normal)
-        row_titulo = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
+        # TITLE
+        row_titulo = ctk.CTkFrame(frame, fg_color=PALETTE["card_bg"])
         row_titulo.pack(fill="x", **padding)
 
         self.entry_titulo = ctk.CTkEntry(
             row_titulo,
-            width=450,
+            width=380,
             fg_color=PALETTE["entry_bg"],
             text_color=PALETTE["text_primary"],
         )
@@ -1400,8 +1532,8 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
             row_titulo, text="Title:", text_color=PALETTE["text_secondary"]
         ).pack(side="right", padx=5)
 
-        # Image Path + Browse
-        row_img = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
+        # IMAGE
+        row_img = ctk.CTkFrame(frame, fg_color=PALETTE["card_bg"])
         row_img.pack(fill="x", **padding)
 
         btn_escolher_img = ctk.CTkButton(
@@ -1417,24 +1549,24 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
 
         self.entry_img = ctk.CTkEntry(
             row_img,
-            width=360,
+            width=300,
             fg_color=PALETTE["entry_bg"],
             text_color=PALETTE["text_primary"],
         )
         self.entry_img.pack(side="right", padx=5)
 
         ctk.CTkLabel(
-            row_img, text="Image Path:", text_color=PALETTE["text_secondary"]
+            row_img, text="Image:", text_color=PALETTE["text_secondary"]
         ).pack(side="right", padx=5)
 
-        # Checkbox Use Default Description
-        row_chk = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
+        # DEFAULT DESC CHECKBOX
+        row_chk = ctk.CTkFrame(frame, fg_color=PALETTE["card_bg"])
         row_chk.pack(fill="x", **padding)
         self.chk_desc_padrao = ctk.CTkCheckBox(
             row_chk,
             text="Use Default Description?",
             variable=self.use_default_desc_var,
-            command=self._on_toggle_desc_padrao,
+            command=self._toggle_desc,
             text_color=PALETTE["text_secondary"],
             fg_color=PALETTE["entry_bg"],
             hover_color=PALETTE["muted_hover"],
@@ -1443,144 +1575,112 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
         )
         self.chk_desc_padrao.pack(anchor="w", padx=5)
 
-        # Description
-        row_desc = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
-        row_desc.pack(fill="x", expand=False, **padding)
+        # DESCRIPTION
+        row_desc = ctk.CTkFrame(frame, fg_color=PALETTE["card_bg"])
+        row_desc.pack(fill="x", **padding)
 
         self.txt_descricao = ctk.CTkTextbox(
             row_desc,
-            width=450,
-            height=100,
-            border_width=2,
+            width=380,
+            height=90,
             fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
             border_color=PALETTE["entry_border"],
-            text_color=PALETTE["text_primary"],
+            border_width=2,
         )
-        self.txt_descricao.pack(side="right", padx=(5, 10), pady=5)
-
+        self.txt_descricao.pack(side="right", padx=(5, 10))
         ctk.CTkLabel(
-            row_desc, text="Description: ", text_color=PALETTE["text_secondary"]
-        ).pack(side="right", anchor="n", padx=5)
+            row_desc, text="Description:", text_color=PALETTE["text_secondary"]
+        ).pack(side="right", padx=5, anchor="n")
+
         self.txt_descricao.insert("1.0", self.settings.descricao_padrao)
+        self._toggle_desc()
 
-        self._aplicar_estado_descricao()
+        # PRICE + QTY
+        row_bottom = ctk.CTkFrame(frame, fg_color=PALETTE["card_bg"])
+        row_bottom.pack(fill="x", **padding)
 
-        # Price + Quantity row
-        row_qtd = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
-        # Price
-        row_qtd.pack(fill="x", **padding)
         self.entry_preco = ctk.CTkEntry(
-            row_qtd,
-            width=196,
+            row_bottom,
+            width=150,
             fg_color=PALETTE["entry_bg"],
             text_color=PALETTE["text_primary"],
         )
-        self.entry_preco.pack(side="right", padx=(5, 10))
         self.entry_preco.insert(0, "0.00")
-        ctk.CTkLabel(
-            row_qtd, text="Price:", text_color=PALETTE["text_secondary"]
-        ).pack(side="right", padx=5)
+        self.entry_preco.pack(side="right", padx=(5, 10))
 
-        # Quantity
-        row_qtd.pack(fill="x", **padding)
+        lbl_price = ctk.CTkLabel(
+            row_bottom, text="Price:", text_color=PALETTE["text_secondary"]
+        )
+        lbl_price.pack(side="right", padx=5)
+
         self.entry_quantidade = ctk.CTkEntry(
-            row_qtd,
-            width=196,
+            row_bottom,
+            width=150,
             fg_color=PALETTE["entry_bg"],
             text_color=PALETTE["text_primary"],
         )
-        self.entry_quantidade.pack(side="right", padx=(5, 10))
         self.entry_quantidade.insert(0, "1")
-        ctk.CTkLabel(
-            row_qtd, text="Quantity:", text_color=PALETTE["text_secondary"]
-        ).pack(side="right", padx=5)
+        self.entry_quantidade.pack(side="right", padx=(5, 10))
 
-        vcmd_int = self.register(self._validate_int)
-        self.entry_quantidade.configure(
-            validate="key", validatecommand=(vcmd_int, "%P")
+        lbl_qty = ctk.CTkLabel(
+            row_bottom, text="Quantity:", text_color=PALETTE["text_secondary"]
         )
+        lbl_qty.pack(side="right", padx=5)
 
-        vcmd_dec = self.register(self._validate_decimal)
-        self.entry_preco.configure(
-            validate="key", validatecommand=(vcmd_dec, "%P")
-        )
+        # BUTTONS
+        btn_row = ctk.CTkFrame(self, fg_color=PALETTE["content_bg"])
+        btn_row.pack(fill="x", pady=(0, 15), padx=20)
 
-        # Buttons
-        frame_botoes = ctk.CTkFrame(self.frame_form, fg_color=PALETTE["card_bg"])
-        frame_botoes.pack(side="bottom", fill="x", pady=(15, 10))
-
-        btn_cancelar = ctk.CTkButton(
-            frame_botoes,
+        btn_cancel = ctk.CTkButton(
+            btn_row,
             text="Cancel",
             fg_color=PALETTE["muted"],
             hover_color=PALETTE["muted_hover"],
             text_color=PALETTE["text_primary"],
-            command=self._on_cancelar,
+            command=self._cancel,
         )
-        btn_cancelar.pack(side="left", padx=10)
+        btn_cancel.pack(side="left", padx=5)
 
-        btn_iniciar = ctk.CTkButton(
-            frame_botoes,
-            text="Start Posting",
-            fg_color=PALETTE["accent"],
-            hover_color=PALETTE["accent_hover"],
-            text_color="black",
-            command=self._on_iniciar_insercao,
-        )
-        btn_iniciar.pack(side="right", padx=(5, 10))
-
-        btn_adicionar_mais = ctk.CTkButton(
-            frame_botoes,
+        btn_add = ctk.CTkButton(
+            btn_row,
             text="Add More",
             fg_color=PALETTE["accent"],
             hover_color=PALETTE["accent_hover"],
             text_color="black",
-            command=self._on_adicionar_mais,
+            command=self._add_item,
         )
-        btn_adicionar_mais.pack(side="right", padx=(10, 5))
-        
+        btn_add.pack(side="right", padx=5)
+
+        btn_finish = ctk.CTkButton(
+            btn_row,
+            text="Finish",
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
+            text_color="black",
+            command=self._finish,
+        )
+        btn_finish.pack(side="right", padx=5)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
     def _on_brainrot_selected(self, name: str):
-        """
-        Called when the user selects a brainrot from the autocomplete
-        in the Name field. Mirrors the same text to the Title field.
-        """
-        if hasattr(self, "entry_titulo") and self.entry_titulo is not None:
-            self.entry_titulo.delete(0, "end")
-            self.entry_titulo.insert(0, name)
+        self.entry_titulo.delete(0, "end")
+        self.entry_titulo.insert(0, name)
 
-    # ---------------------- validation ----------------------
-    def _validate_int(self, new_value: str) -> bool:
-        if new_value == "":
-            return True
-        return new_value.isdigit()
-
-    def _validate_decimal(self, new_value: str) -> bool:
-        if new_value == "":
-            return True
-        try:
-            Decimal(new_value.replace(",", "."))
-            return True
-        except (InvalidOperation, ValueError):
-            return False
-
-    # ---------------------- callbacks ----------------------
-    def _on_adicionar_por_imagem(self):
-        # placeholder
-        pass
-
-    def _mostrar_formulario_manual(self):
-        if not self.frame_form.winfo_ismapped():
-            self.frame_form.pack(fill="both", expand=True, padx=20, pady=10)
+    def _toggle_desc(self):
+        if self.use_default_desc_var.get():
+            self.txt_descricao.configure(state="normal")
+            self.txt_descricao.delete("1.0", "end")
+            self.txt_descricao.insert("1.0", self.settings.descricao_padrao)
+            self.txt_descricao.configure(state="disabled")
+        else:
+            self.txt_descricao.configure(state="normal")
 
     def _on_escolher_imagem(self):
-        initial_dir = (
-            str(self.settings.pasta_imagens)
-            if self.settings.pasta_imagens
-            else "."
-        )
         file_path = filedialog.askopenfilename(
             title="Select brainrot image",
-            initialdir=initial_dir,
             filetypes=[
                 ("Images", "*.png *.jpg *.jpeg *.webp *.gif"),
                 ("All files", "*.*"),
@@ -1590,81 +1690,82 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
             self.entry_img.delete(0, "end")
             self.entry_img.insert(0, file_path)
 
-    def _on_toggle_desc_padrao(self):
-        self._aplicar_estado_descricao()
+    # ------------------------------------------------------------------
+    # IData extraction
+    # ------------------------------------------------------------------
+    def _build_item(self):
+        from decimal import Decimal
 
-    def _aplicar_estado_descricao(self):
-        if self.use_default_desc_var.get():
-            self.txt_descricao.configure(state="normal")
-            self.txt_descricao.delete("1.0", "end")
-            self.txt_descricao.insert("1.0", self.settings.descricao_padrao)
-            self.txt_descricao.configure(state="disabled")
-        else:
-            self.txt_descricao.configure(state="normal")
-
-    def _on_cancelar(self):
-        self.master._log("New insertion cancelled by user.")
-        self.destroy()
-
-    def _coletar_item_do_form(self) -> ItemInsercao | None:
         nome = self.entry_nome.get().strip()
         titulo = self.entry_titulo.get().strip()
-        imgUrl = self.entry_img.get().strip()
-        qtd_raw = self.entry_quantidade.get().strip()
-        preco_raw = self.entry_preco.get().strip()
-
-        if self.use_default_desc_var.get():
-            descricao = self.settings.descricao_padrao
-        else:
-            descricao = self.txt_descricao.get("1.0", "end").strip()
+        img = self.entry_img.get().strip()
+        qty = self.entry_quantidade.get().strip()
+        price = self.entry_preco.get().strip()
 
         if not nome:
-            messagebox.showerror("Validation error", "The 'Name' field is required.")
+            messagebox.showerror("Validation error", "Name is required.", parent=self)
             return None
 
-        if not qtd_raw:
-            messagebox.showerror(
-                "Validation error", "The 'Quantity' field is required."
-            )
+        if not qty:
+            messagebox.showerror("Validation error", "Quantity is required.", parent=self)
             return None
 
-        if not preco_raw:
-            messagebox.showerror(
-                "Validation error", "The 'Price' field is required."
-            )
+        if not price:
+            messagebox.showerror("Validation error", "Price is required.", parent=self)
             return None
 
         try:
-            quantidade = int(qtd_raw)
+            quantidade = int(qty)
             if quantidade <= 0:
                 raise ValueError
-        except ValueError:
-            messagebox.showerror(
-                "Validation error",
-                "Quantity must be a positive integer.",
-            )
+        except:
+            messagebox.showerror("Validation error", "Invalid quantity.", parent=self)
             return None
 
         try:
-            preco = Decimal(preco_raw.replace(",", "."))
-        except (InvalidOperation, AttributeError):
-            messagebox.showerror(
-                "Validation error",
-                "Invalid price. Use only numbers, dot or comma.",
-            )
+            preco = Decimal(price.replace(",", "."))
+        except:
+            messagebox.showerror("Validation error", "Invalid price.", parent=self)
             return None
 
-        item = ItemInsercao(
+        if self.use_default_desc_var.get():
+            descricao = "DEFAULT"
+        else:
+            descricao = self.txt_descricao.get("1.0", "end").strip() or "DEFAULT"
+
+        if not titulo:
+            titulo = nome
+
+        return ItemInsercao(
             nome=nome,
             titulo=titulo,
-            imgUrl=imgUrl,
+            imgUrl=img,
             descricao=descricao,
             quantidade=quantidade,
             preco=preco,
         )
-        return item
 
-    def _limpar_form(self):
+    # ------------------------------------------------------------------
+    # Buttons actions
+    # ------------------------------------------------------------------
+    def _add_item(self):
+        item = self._build_item()
+        if item is None:
+            return
+        self.on_add(item)
+        self._clear_form()
+
+    def _finish(self):
+        item = self._build_item()
+        if item:
+            self.on_add(item)
+        self.on_finish()
+        self.destroy()
+
+    def _cancel(self):
+        self.destroy()
+
+    def _clear_form(self):
         self.entry_nome.delete(0, "end")
         self.entry_titulo.delete(0, "end")
         self.entry_img.delete(0, "end")
@@ -1672,79 +1773,34 @@ class NovaInsercaoWindow(ctk.CTkToplevel):
         self.entry_quantidade.insert(0, "1")
         self.entry_preco.delete(0, "end")
         self.entry_preco.insert(0, "0.00")
-        self._aplicar_estado_descricao()
+        self.use_default_desc_var.set(True)
+        self._toggle_desc()
 
-    def _on_adicionar_mais(self):
-        item = self._coletar_item_do_form()
-        if item is None:
-            return
 
-        caminho_csv = self.settings.csv_ativo_path
-        adicionar_ou_incrementar_item(caminho_csv, item)
 
-        self.master._log(
-            f"[Insertion] Item '{item.nome}' added/incremented in active CSV."
-        )
-
-        if self.refresh_main_callback:
-            self.refresh_main_callback()
-
-        self._limpar_form()
-
-    def _on_iniciar_insercao(self):
-        campos_preenchidos = any(
-            [
-                self.entry_nome.get().strip(),
-                self.entry_titulo.get().strip(),
-                self.entry_img.get().strip(),
-                (
-                    self.txt_descricao.get("1.0", "end").strip()
-                    if not self.use_default_desc_var.get()
-                    else True
-                ),
-            ]
-        )
-
-        if campos_preenchidos and self.entry_nome.get().strip():
-            item = self._coletar_item_do_form()
-            if item is not None:
-                caminho_csv = self.settings.csv_ativo_path
-                adicionar_ou_incrementar_item(caminho_csv, item)
-                self.master._log(
-                    f"[Insertion] Item '{item.nome}' added/incremented in active CSV (before starting bot)."
-                )
-                if self.refresh_main_callback:
-                    self.refresh_main_callback()
-
-        self.master._log("Starting insertion flow (bot)...")
-        self.destroy()
-
-        if self.start_bot_callback:
-            self.start_bot_callback()
-            
-            
+# ======================================================================
+# Initial paths helper
+# ======================================================================
 def ensure_initial_paths(app: BotApp) -> bool:
-        """
-        Ensures the initial CSV and Chrome profile paths are configured.
-        Shows a first-run setup window if needed.
-        """
-        settings = app.settings
+    """
+    Ensures the initial CSV and Chrome profile paths are configured.
+    Shows a first-run setup window if needed.
+    """
+    settings = app.settings
 
-        # Se já rodou o setup uma vez, não faz nada.
-        if getattr(settings, "initial_setup_done", False):
-            return True
+    if getattr(settings, "initial_setup_done", False):
+        return True
 
-        done = {"ok": False}
+    done = {"ok": False}
 
-        def _on_done():
-            done["ok"] = True
-            # atualizar tela principal (paths podem ter mudado)
-            app._refresh_main_info()
+    def _on_done():
+        done["ok"] = True
+        app._refresh_main_info()
 
-        win = InitialSetupWindow(app, settings, on_done=_on_done)
-        app.wait_window(win)
+    win = InitialSetupWindow(app, settings, on_done=_on_done)
+    app.wait_window(win)
 
-        return done["ok"]
+    return done["ok"]
 
 
 # ----------------------------------------------------------------------
@@ -1767,7 +1823,6 @@ def main():
             app.destroy()
         return
 
-    # 3) Agora mantém a janela principal visível normalmente
     app.mainloop()
 
 

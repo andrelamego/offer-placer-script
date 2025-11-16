@@ -8,7 +8,6 @@ from __future__ import annotations
 import time
 
 from typing import Callable, Optional
-from src.core.settings import Settings
 from src.core.insercao_service import carregar_insercao
 from src.core.log_insercoes_service import registrar_log_insercao
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -17,6 +16,7 @@ from pathlib import Path
 
 from src.settings.config import DESCRICAO_PADRAO
 from src.core.models import ItemInsercao
+from src.core.settings import Settings
 from src.core.helpers import (
     carregar_itens,
     abrir_navegador,
@@ -163,11 +163,20 @@ def preencher_formulario_item(driver, item: ItemInsercao):
     - Marca as duas checkboxes
     - Clica em "Place Offer"
     """
+    
+    settings = Settings.load()
 
     titulo = item.titulo
     foto = item.imgUrl
     quantidade = str(item.quantidade)
     preco = str(item.preco)
+    raw_desc = (item.descricao or "").strip()
+
+    if getattr(item, "descricao_is_default", False) or raw_desc.upper() == "DEFAULT":
+        desc = settings.descricao_padrao
+    else:
+        desc = raw_desc
+        
 
     # 2) Título
     preencher_campo(
@@ -187,14 +196,14 @@ def preencher_formulario_item(driver, item: ItemInsercao):
         descricao="Upload da imagem do anúncio"
     )
 
-    time.sleep(1)  # Pequena pausa para garantir upload
+    time.sleep(0.5)  # Pequena pausa para garantir upload
 
-    # 4) Descrição (padrão)
+    # 4) Descrição
     preencher_campo(
         driver,
         By.XPATH,
         "(//textarea[@placeholder='Type here...'])[2]",
-        DESCRICAO_PADRAO,
+        desc,
         descricao="Descrição"
     )
 
@@ -212,7 +221,8 @@ def preencher_formulario_item(driver, item: ItemInsercao):
         By.XPATH,
         "(//span[contains(@class,'unit-label') and normalize-space()='unit']/preceding-sibling::input)[1]",
         quantidade,
-        descricao="Quantidade (input ao lado de unit)"
+        descricao="Quantidade (input ao lado de unit)",
+        limpar=True
     )
 
     # 7) Preço

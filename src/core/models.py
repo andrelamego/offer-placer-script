@@ -34,6 +34,8 @@ class ItemInsercao:
     descricao: str
     quantidade: int = 1
     preco: Decimal = Decimal("0.00")
+    # flag interna para saber se essa descrição é a padrão das Settings
+    descricao_is_default: bool = False
 
     # --------- helpers de CSV ---------
 
@@ -42,6 +44,11 @@ class ItemInsercao:
         """
         Converte um dict (linha de csv.DictReader) em ItemInsercao.
         Faz conversão de quantidade e preco.
+
+        OBS:
+        - Aqui NÃO tratamos "DEFAULT" -> descrição padrão,
+          isso é feito em inserircao_service.carregar_insercao,
+          pois lá temos acesso às Settings.
         """
         nome = (row.get("nome") or "").strip()
         titulo = (row.get("titulo") or "").strip()
@@ -59,7 +66,11 @@ class ItemInsercao:
 
         # preco -> Decimal (default 0 se vier vazio/errado)
         try:
-            preco = Decimal(preco_raw.replace(",", ".")) if preco_raw else Decimal("0.00")
+            preco = (
+                Decimal(preco_raw.replace(",", "."))
+                if preco_raw
+                else Decimal("0.00")
+            )
         except (InvalidOperation, AttributeError):
             preco = Decimal("0.00")
 
@@ -70,18 +81,26 @@ class ItemInsercao:
             descricao=descricao,
             quantidade=quantidade,
             preco=preco,
+            # ao carregar do CSV não sabemos ainda se é default,
+            # isso será ajustado em inserircao_service.carregar_insercao
+            descricao_is_default=False,
         )
 
     def to_csv_row(self) -> Dict[str, str]:
         """
         Converte o ItemInsercao em um dict pronto para csv.DictWriter.
         Todos os valores são strings.
+
+        Se descricao_is_default == True, grava "DEFAULT" no campo descricao
+        (a descrição real fica nas Settings).
         """
+        descricao_csv = "DEFAULT" if self.descricao_is_default else self.descricao
+
         return {
             "nome": self.nome,
             "titulo": self.titulo,
             "imgUrl": self.imgUrl,
-            "descricao": self.descricao,
+            "descricao": descricao_csv,
             "quantidade": str(self.quantidade),
             "preco": f"{self.preco:.2f}",  # 2 casas decimais
         }
@@ -93,10 +112,11 @@ class ItemInsercao:
         Define quando dois itens pertencem ao mesmo brainrot
         dentro de UMA inserção.
 
-        Pelo que você pediu: se tiverem o MESMO nome, não cria
-        linha duplicada, só incrementa quantidade.
+        Critério atual:
+        - mesmo nome (case-insensitive)
+        - mesmo título (case-insensitive)
 
-        Se no futuro você quiser incluir titulo, pode mudar para:
-        return (self.nome.strip().lower(), self.titulo.strip().lower())
+        Isso garante que o mesmo brainrot com a mesma geração/variação
+        não crie linhas duplicadas, apenas incrementa a quantidade.
         """
         return (self.nome.strip().lower(), self.titulo.strip().lower())

@@ -60,5 +60,6 @@ BRAINROT_NAMES = [
     "Burguro and Fryuro",
     "Job Job Job Sahur",
     "Las Vaquitas Saturnas",
-    "Graipuss Medussi"
+    "Graipuss Medussi",
+    "La Taco Combinasion"
 ]

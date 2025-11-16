@@ -7,6 +7,7 @@ import os
 import csv
 import time
 import undetected_chromedriver as uc
+from selenium.webdriver.common.keys import Keys
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -297,18 +298,29 @@ def upload_arquivo(driver, by: By, seletor: str, caminho_arquivo: str, descricao
 
 def preencher_campo(driver, by: By, seletor: str, valor: str, limpar: bool = True, descricao: str = "campo"):
     """
-    Espera o campo ficar visível, opcionalmente limpa e preenche com 'valor'.
+    Espera o campo ficar visível, limpa corretamente (CTRL+A + BACKSPACE)
+    e preenche com 'valor'.
     """
     time.sleep(0.1)
-    
+
     elem = WebDriverWait(driver, TEMPO_ESPERA).until(
         EC.visibility_of_element_located((by, seletor))
     )
+
     if limpar:
-        elem.clear()
+        try:
+            # Seleciona tudo e apaga
+            elem.send_keys(Keys.CONTROL, "a")
+            elem.send_keys(Keys.BACKSPACE)
+            time.sleep(0.05)
+        except Exception:
+            # fallback
+            elem.clear()
+
     elem.send_keys(valor)
     print(f"[OK] Preenchi {descricao} com: {valor}")
     return elem
+
 
 
 def selecionar_dropdown_por_texto(driver, by: By, seletor: str, texto: str, descricao: str = "dropdown"):
