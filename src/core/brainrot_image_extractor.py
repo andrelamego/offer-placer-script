@@ -240,8 +240,13 @@ class BrainrotImageExtractor:
 # Singleton
 # ---------------------------------------------------------------------
 
-# ajuste este caminho se o modelo estiver em outro lugar
-DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "src" / "models" / "brainrot_ocr.pt"
+from src.core.paths import get_base_dir
+
+BASE_DIR = get_base_dir()
+MODELS_DIR = BASE_DIR / "src" /"models"
+
+DEFAULT_MODEL_PATH = MODELS_DIR / "brainrot_ocr.pt"
+
 _extractor_singleton: Optional[BrainrotImageExtractor] = None
 
 def get_extractor() -> BrainrotImageExtractor:

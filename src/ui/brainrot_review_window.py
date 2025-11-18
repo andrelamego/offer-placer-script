@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional
 
+import re
+from decimal import Decimal, InvalidOperation
 import customtkinter as ctk
 from PIL import Image
 import tkinter as tk
@@ -13,7 +15,35 @@ import tkinter.messagebox as messagebox
 import re
 from difflib import SequenceMatcher
 
-from src.core.brainrots_data import BRAINROT_NAMES  # sua lista de nomes oficiais
+from src.core.brainrots_data import BRAINROT_NAMES
+
+# =========================
+# PALETTE / THEME
+# =========================
+PALETTE = {
+    # main background
+    "bg": "#2F2F2F",
+    "sidebar_bg": "#373737",
+    "content_bg": "#373737",
+
+    # text
+    "text_primary": "#F9FAFB",
+    "text_secondary": "#9CA3AF",
+
+    # buttons
+    "accent": "#E5A000",
+    "accent_hover": "#AF7B00",
+    "danger": "#EF4444",
+    "danger_hover": "#B91C1C",
+    "muted": "#4B5563",
+    "muted_hover": "#374151",
+
+    # components
+    "card_bg": "#414141",
+    "entry_bg": "#414141",
+    "entry_border": "#565B5E",
+    "log_bg": "#414141",
+}
 
 
 # -------------------------------------------------------------------
@@ -80,14 +110,14 @@ class BrainrotSummaryWindow(ctk.CTkToplevel):
             self,
             text="Review summary",
             font=ctk.CTkFont(size=18, weight="bold"),
-            text_color="#F9FAFB",
+            text_color=PALETTE["text_primary"],
         )
         title.pack(anchor="w", padx=20, pady=(15, 5))
 
         subtitle = ctk.CTkLabel(
             self,
             text="These brainrots will be added to the CSV. Confirm to continue.",
-            text_color="#9CA3AF",
+            text_color=PALETTE["text_secondary"],
         )
         subtitle.pack(anchor="w", padx=20, pady=(0, 10))
 
@@ -128,8 +158,8 @@ class BrainrotSummaryWindow(ctk.CTkToplevel):
         btn_cancel = ctk.CTkButton(
             btn_row,
             text="Back",
-            fg_color="#4B5563",
-            hover_color="#374151",
+            fg_color=PALETTE["muted"],
+            hover_color=PALETTE["muted_hover"],
             text_color="white",
             width=110,
             command=self._on_back,
@@ -139,8 +169,8 @@ class BrainrotSummaryWindow(ctk.CTkToplevel):
         btn_ok = ctk.CTkButton(
             btn_row,
             text="Confirm",
-            fg_color="#E5A000",
-            hover_color="#AF7B00",
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
             text_color="black",
             width=110,
             command=self._on_confirm,
@@ -258,14 +288,14 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
             header,
             text="Review brainrot",
             font=ctk.CTkFont(size=18, weight="bold"),
-            text_color="#F9FAFB",
+            text_color=PALETTE["text_primary"],
         )
         lbl_title.pack(side="left")
 
         self.lbl_index = ctk.CTkLabel(
             header,
             text="",
-            text_color="#9CA3AF",
+            text_color=PALETTE["text_secondary"],
         )
         self.lbl_index.pack(side="right")
 
@@ -274,11 +304,15 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
 
         # Esquerda: imagem
         left = ctk.CTkFrame(main, fg_color="#414141", width=260)
-        left.pack(side="left", fill="y", padx=(10, 5), pady=10)
+        left.pack(side="left", fill="y", expand=False, padx=(10, 5), pady=10)
         left.pack_propagate(False)
+        
+        self.left_frame = left
 
         self.lbl_image = ctk.CTkLabel(left, text="")
-        self.lbl_image.pack(padx=10, pady=10)
+        self.lbl_image.pack(fill="both", expand=True, padx=10, pady=10)
+        #self.left_frame.bind("<Configure>", lambda e: self.update_image(self.pil_image))
+
 
         # Direita: campos
         right = ctk.CTkFrame(main, fg_color="#414141")
@@ -287,31 +321,48 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
         # Name
         row_name = ctk.CTkFrame(right, fg_color="transparent")
         row_name.pack(fill="x", padx=10, pady=(10, 5))
-        ctk.CTkLabel(
+        
+        """ctk.CTkLabel(
             row_name,
             text="Name:",
-            text_color="#E5E7EB",
+            text_color=PALETTE["text_primary"],
         ).pack(side="left")
         self.entry_name = ctk.CTkEntry(
             row_name,
             textvariable=self.var_name,
-            fg_color="#1F2933",
-            text_color="#F9FAFB",
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
         )
-        self.entry_name.pack(side="left", fill="x", expand=True, padx=(8, 0))
+        self.entry_name.pack(side="left", fill="x", expand=True, padx=(8, 0))"""
+
+        ctk.CTkLabel(
+            row_name,
+            text="Name:",
+            text_color=PALETTE["text_secondary"]
+        ).pack(side="left")
+        
+        self.entry_name = AutocompleteEntry(
+            row_name,
+            textvariable=self.var_name,
+            suggestions=BRAINROT_NAMES,
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
+        )
+        self.entry_name.pack(side="left", padx=(8, 0), fill="x", expand=True)
+
 
         # Variation
         row_var = ctk.CTkFrame(right, fg_color="transparent")
         row_var.pack(fill="x", padx=10, pady=5)
         ctk.CTkLabel(
             row_var,
-            text="Variation:",
+            text="Variation (ex: Diamond):",
             text_color="#E5E7EB",
         ).pack(side="left")
         self.entry_var = ctk.CTkEntry(
             row_var,
             textvariable=self.var_variation,
-            fg_color="#1F2933",
+            fg_color=PALETTE["entry_bg"],
             text_color="#F9FAFB",
         )
         self.entry_var.pack(side="left", fill="x", expand=True, padx=(8, 0))
@@ -327,7 +378,7 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
         self.entry_gen = ctk.CTkEntry(
             row_gen,
             textvariable=self.var_gen,
-            fg_color="#1F2933",
+            fg_color=PALETTE["entry_bg"],
             text_color="#F9FAFB",
         )
         self.entry_gen.pack(side="left", fill="x", expand=True, padx=(8, 0))
@@ -343,9 +394,8 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
         self.entry_title = ctk.CTkEntry(
             row_title,
             textvariable=self.var_title,
-            fg_color="#111827",
+            fg_color=PALETTE["entry_bg"],
             text_color="#FBBF24",
-            state="disabled",
         )
         self.entry_title.pack(side="left", fill="x", expand=True, padx=(8, 0))
 
@@ -358,8 +408,8 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
             variable=self.var_use_default_desc,
             text_color="#E5E7EB",
             command=self._on_toggle_default_desc,
-            fg_color="#1F2933",
-            border_color="#111827",
+            fg_color=PALETTE["entry_bg"],
+            border_color=PALETTE["entry_border"],
             checkmark_color="#E5A000",
         )
         chk.pack(anchor="w")
@@ -377,8 +427,10 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
         self.txt_description = ctk.CTkTextbox(
             row_desc,
             height=120,
-            fg_color="#1F2933",
+            fg_color=PALETTE["entry_bg"],
             text_color="#F9FAFB",
+            border_width=2,
+            border_color=PALETTE["entry_border"],
         )
         self.txt_description.pack(fill="both", expand=True, pady=(4, 0))
 
@@ -396,25 +448,35 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
             row_qp,
             width=80,
             textvariable=self.var_quantity,
-            fg_color="#1F2933",
+            fg_color=PALETTE["entry_bg"],
             text_color="#F9FAFB",
         )
         self.entry_qty.pack(side="left", padx=(5, 15))
 
         # Price
+        # registrar função de validação do Tk/CTk
+        validate_cmd = self.register(self._validate_preco)
+        
         ctk.CTkLabel(
             row_qp,
             text="Price:",
             text_color="#E5E7EB",
         ).pack(side="left")
-        self.entry_price = ctk.CTkEntry(
+        self.entry_preco = ctk.CTkEntry(
             row_qp,
             width=80,
             textvariable=self.var_price,
-            fg_color="#1F2933",
-            text_color="#F9FAFB",
+            fg_color=PALETTE["entry_bg"],
+            text_color=PALETTE["text_primary"],
+            validate="key",
+            validatecommand=(validate_cmd, "%P"),  # %P = novo valor proposto
         )
-        self.entry_price.pack(side="left", padx=(5, 0))
+
+        self.entry_preco.insert(0, "0.00")
+        self.entry_preco.pack(side="right", padx=(5, 10))
+
+        # quando o campo perder foco, normaliza e formata
+        self.entry_preco.bind("<FocusOut>", self._on_preco_focus_out)
 
         # Rodapé: botões Anterior / Próximo
         footer = ctk.CTkFrame(self, fg_color="transparent")
@@ -424,8 +486,8 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
             footer,
             text="Previous",
             width=110,
-            fg_color="#4B5563",
-            hover_color="#374151",
+            fg_color=PALETTE["muted"],
+            hover_color=PALETTE["muted_hover"],
             text_color="white",
             command=self._on_prev,
         )
@@ -435,8 +497,8 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
             footer,
             text="Next",
             width=110,
-            fg_color="#E5A000",
-            hover_color="#AF7B00",
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
             text_color="black",
             command=self._on_next,
         )
@@ -449,7 +511,6 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
     # ----------------------------------------------------------------
     # Carregar / salvar estado da página atual
     # ----------------------------------------------------------------
-
     def _update_title_preview(self):
         name = self.var_name.get().strip()
         variation = self.var_variation.get().strip()
@@ -489,7 +550,7 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
         if img_path and Path(img_path).exists():
             pil_img = Image.open(img_path)
             # tamanho máximo do preview
-            max_w, max_h = 220, 220
+            max_w, max_h = 400, 400
             pil_img.thumbnail((max_w, max_h), Image.LANCZOS)
             self._image_cache = ctk.CTkImage(light_image=pil_img, size=pil_img.size)
             if self.lbl_image:
@@ -544,14 +605,56 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
     # ----------------------------------------------------------------
     # Handlers
     # ----------------------------------------------------------------
+    def _validate_preco(self, new_value: str) -> bool:
+        """
+        Valida o campo de preço em tempo real:
+        - permite apenas dígitos e ponto
+        - no máximo um ponto
+        - permite vazio (pra não travar o backspace)
+        """
+        # Permitir vazio (user limpando o campo)
+        if new_value == "":
+            return True
 
+        # Regex: qualquer quantidade de dígitos, opcionalmente um ponto, depois mais dígitos
+        # exemplos aceitos: "1", "12", "12.", "12.3", "0.99", ".5" (vamos arrumar no focus out)
+        padrao = r"^\d*\.?\d*$"
+        return re.match(padrao, new_value) is not None
+
+    def _on_preco_focus_out(self, event=None):
+        """
+        Ao sair do campo:
+        - corrige entrada tipo ".5" -> "0.5"
+        - converte para Decimal
+        - formata em 2 casas: 0.00
+        """
+        texto = self.entry_preco.get().strip()
+
+        if texto == "" or texto == ".":
+            valor = Decimal("0.00")
+        else:
+            # se começar com ponto, adiciona zero: ".5" -> "0.5"
+            if texto.startswith("."):
+                texto = "0" + texto
+
+            try:
+                valor = Decimal(texto)
+            except Exception:
+                # se der qualquer problema, zera
+                valor = Decimal("0.00")
+
+        # formata sempre com 2 casas decimais
+        texto_formatado = f"{valor:.2f}"
+
+        self.entry_preco.delete(0, "end")
+        self.entry_preco.insert(0, texto_formatado)
+
+    
     def _on_toggle_default_desc(self):
         self._apply_desc_state()
 
     def _on_prev(self):
         if self.current_index == 0:
-            return
-        if not self._save_current():
             return
         self.current_index -= 1
         self._load_current_item()
@@ -589,7 +692,7 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
             desc = self.default_description
 
         # quantity
-        qty_raw = self.var_quantity.get().strip()
+        qty_raw = (self.var_quantity.get() or "").strip()
         if not qty_raw.isdigit() or int(qty_raw) <= 0:
             messagebox.showerror(
                 "Validation error",
@@ -600,8 +703,10 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
         quantity = int(qty_raw)
 
         # price
-        price_raw = self.var_price.get().strip().replace(",", ".")
-        if not price_raw:
+        price_raw = (self.var_price.get() or "").strip().replace(",", ".")
+
+        # casos claramente vazios/incompletos
+        if price_raw in ("", ".", ","):
             messagebox.showerror(
                 "Validation error",
                 "Price is required.",
@@ -609,11 +714,24 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
             )
             return False
 
+        # tenta converter para Decimal
         try:
-            price = float(price_raw)
-            if price <= 0:
-                raise ValueError
-        except ValueError:
+            # corrige casos como ".5" -> "0.5"
+            if price_raw.startswith("."):
+                price_raw = "0" + price_raw
+
+            price = Decimal(price_raw)
+
+        except (InvalidOperation, ValueError):
+            messagebox.showerror(
+                "Validation error",
+                "Price must be a valid number.",
+                parent=self,
+            )
+            return False
+
+        # valida valor > 0
+        if price <= 0:
             messagebox.showerror(
                 "Validation error",
                 "Price must be a number greater than zero.",
@@ -714,3 +832,149 @@ class BrainrotReviewWindow(ctk.CTkToplevel):
 
         # Abre a janela de resumo passando a lista de BrainrotReviewResult
         BrainrotSummaryWindow(self, results, on_confirm=_on_confirm)
+
+
+# ======================================================================
+# AutocompleteEntry (Name field)
+# ======================================================================
+class AutocompleteEntry(ctk.CTkEntry):
+    def __init__(
+        self,
+        master,
+        suggestions: list[str],
+        on_select=None,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(master, *args, **kwargs)
+        self.suggestions = suggestions
+        self.on_select = on_select  # callback ao selecionar
+
+        self._dropdown: tk.Toplevel | None = None
+        self._listbox: tk.Listbox | None = None
+
+        self.bind("<KeyRelease>", self._on_keyrelease)
+        self.bind("<Down>", self._on_down)
+        self.bind("<Return>", self._on_return)
+        self.bind("<FocusOut>", self._on_focus_out)
+
+        # estilo do dropdown
+        self.dropdown_bg = "#2F2F2F"
+        self.dropdown_border = "#2F2F2F"
+        self.dropdown_text = "#F9FAFB"
+        self.dropdown_select_bg = "#E5A000"
+        self.dropdown_select_fg = "#000000"
+
+    # --------------------------------------------------
+    # helpers de dropdown / listbox
+    # --------------------------------------------------
+    def _create_dropdown(self):
+        if self._dropdown is not None:
+            return
+
+        self._dropdown = tk.Toplevel(self)
+        self._dropdown.wm_overrideredirect(True)
+        self._dropdown.configure(bg=self.dropdown_border)
+
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        self._dropdown.geometry(f"+{x}+{y}")
+
+        frame = tk.Frame(self._dropdown, bg=self.dropdown_border, bd=2)
+        frame.pack(fill="both", expand=True)
+
+        self._listbox = tk.Listbox(
+            frame,
+            height=6,
+            borderwidth=0,
+            highlightthickness=0,
+            background=self.dropdown_bg,
+            foreground=self.dropdown_text,
+            selectbackground=self.dropdown_select_bg,
+            selectforeground=self.dropdown_select_fg,
+            relief="flat",
+            font=("Segoe UI", 11),
+        )
+        self._listbox.pack(fill="both", expand=True, padx=4, pady=3)
+
+        self._listbox.bind("<<ListboxSelect>>", self._on_listbox_click)
+        self._listbox.bind("<ButtonRelease-1>", self._on_listbox_click)
+
+    def _destroy_dropdown(self):
+        if self._dropdown is not None:
+            self._dropdown.destroy()
+            self._dropdown = None
+            self._listbox = None
+
+    # --------------------------------------------------
+    # eventos
+    # --------------------------------------------------
+    def _on_keyrelease(self, event):
+        if event.keysym in ("Return", "Up", "Down"):
+            return
+
+        text = self.get().strip()
+        if not text:
+            self._destroy_dropdown()
+            return
+
+        lowercase = text.lower()
+        matches = [s for s in self.suggestions if lowercase in s.lower()]
+
+        if not matches:
+            self._destroy_dropdown()
+            return
+
+        self._create_dropdown()
+        assert self._listbox is not None
+        self._listbox.delete(0, tk.END)
+        for item in matches:
+            self._listbox.insert(tk.END, f"  {item}  ")
+
+        self._listbox.selection_clear(0, tk.END)
+        self._listbox.selection_set(0)
+        self._listbox.activate(0)
+
+    def _on_down(self, event):
+        if self._listbox is None:
+            return "break"
+        cur = self._listbox.curselection()
+        if not cur:
+            idx = 0
+        else:
+            idx = cur[0] + 1
+        if idx >= self._listbox.size():
+            idx = self._listbox.size() - 1
+        self._listbox.selection_clear(0, tk.END)
+        self._listbox.selection_set(idx)
+        self._listbox.activate(idx)
+        return "break"
+
+    def _on_return(self, event):
+        if self._listbox is not None:
+            self._apply_selection()
+            return "break"
+
+    def _on_focus_out(self, event):
+        self.after(150, self._destroy_dropdown)
+
+    def _on_listbox_click(self, event):
+        self._apply_selection()
+
+    # --------------------------------------------------
+    # seleção de item
+    # --------------------------------------------------
+    def _apply_selection(self):
+        if self._listbox is None:
+            return
+        cur = self._listbox.curselection()
+        if not cur:
+            return
+
+        text = self._listbox.get(cur[0]).strip()
+        self.delete(0, tk.END)
+        self.insert(0, text)
+        self._destroy_dropdown()
+
+        if callable(self.on_select):
+            self.on_select(text)

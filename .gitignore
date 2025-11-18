@@ -15,6 +15,7 @@ dist/
 ########################
 # Virtualenv
 ########################
+.venv-build/
 .venv/
 venv/
 env/

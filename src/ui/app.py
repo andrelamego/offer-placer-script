@@ -60,7 +60,7 @@ PALETTE = {
     # components
     "card_bg": "#414141",
     "entry_bg": "#414141",
-    "entry_border": "#555555",
+    "entry_border": "#565B5E",
     "log_bg": "#414141",
 }
 
@@ -129,7 +129,7 @@ class BotApp(ctk.CTk):
         # Sidebar buttons (store references)
         self.btn_add_offers = ctk.CTkButton(
             sidebar,
-            text="Add Offers",
+            text="Add Brainrots",
             command=self.show_add_offers,
             width=150,
             fg_color=PALETTE["accent"],
@@ -151,7 +151,7 @@ class BotApp(ctk.CTk):
 
         lbl_made = ctk.CTkLabel(
             sidebar,
-            text="Made by:\nandrelamego",
+            text=f"{short_version()}",
             font=ctk.CTkFont(size=12),
             justify="center",
             text_color=PALETTE["text_secondary"],
@@ -307,7 +307,8 @@ class BotApp(ctk.CTk):
             text=(
                 "1) Log in manually in the browser window.\n"
                 "2) Solve the CAPTCHA (if any).\n"
-                "3) Leave the page on the screen with the 'Sell' button.\n\n"
+                "3) Make sure your store is open.\n"
+                "4) Leave the site on the main page.\n\n"
                 "When everything is ready, click the button below."
             ),
             justify="left",
@@ -369,7 +370,7 @@ class AddOffersFrame(ctk.CTkFrame):
         # Title
         lbl_title = ctk.CTkLabel(
             self,
-            text="Add Offers",
+            text="Add Brainrots",
             font=ctk.CTkFont(size=22, weight="bold"),
             text_color=PALETTE["text_primary"],
         )
@@ -381,7 +382,7 @@ class AddOffersFrame(ctk.CTkFrame):
 
         lbl_csv_title = ctk.CTkLabel(
             frame_csv,
-            text="Current .CSV",
+            text="Current Brainrot .CSV",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=PALETTE["text_primary"],
         )
@@ -426,6 +427,28 @@ class AddOffersFrame(ctk.CTkFrame):
             text_color=PALETTE["text_primary"],
         )
         btn_open.pack(side="left", padx=(0, 10))
+        
+        btn_add_manual = ctk.CTkButton(
+            btns,
+            text="Add Manually",
+            width=110,
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
+            text_color="black",
+            command=self._open_manual_window,
+        )
+        btn_add_manual.pack(side="left", padx=(0, 10))
+        
+        btn_add_image = ctk.CTkButton(
+            btns,
+            text="Add by Image",
+            width=110,
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
+            text_color="black",
+            command=self._on_add_by_image,
+        )
+        btn_add_image.pack(side="left", padx=(0, 10))
 
         # Logs
         lbl_logs = ctk.CTkLabel(
@@ -442,6 +465,7 @@ class AddOffersFrame(ctk.CTkFrame):
             height=130,
             fg_color=PALETTE["log_bg"],
             text_color=PALETTE["text_primary"],
+            border_color=PALETTE["entry_border"],
         )
         self.txt_logs.pack(fill="x", padx=20, pady=(5, 10))
         self.txt_logs.configure(state="disabled")
@@ -449,29 +473,7 @@ class AddOffersFrame(ctk.CTkFrame):
         # Actions row: Add by Image / Add Manually / Start Posting
         actions = ctk.CTkFrame(self, fg_color=PALETTE["content_bg"])
         actions.pack(fill="x", padx=20, pady=(0, 10))
-
-        btn_add_image = ctk.CTkButton(
-            actions,
-            text="Add by Image",
-            width=160,
-            fg_color=PALETTE["accent"],
-            hover_color=PALETTE["accent_hover"],
-            text_color="black",
-            command=self._on_add_by_image,
-        )
-        btn_add_image.pack(side="right", padx=(10, 0), pady=(0, 10))
-
-        btn_add_manual = ctk.CTkButton(
-            actions,
-            text="Add Manually",
-            width=160,
-            fg_color=PALETTE["accent"],
-            hover_color=PALETTE["accent_hover"],
-            text_color="black",
-            command=self._open_manual_window,
-        )
-        btn_add_manual.pack(side="right", padx=(10, 0), pady=(0, 10))
-
+        
         btn_start = ctk.CTkButton(
             actions,
             text="Start Posting",
@@ -481,7 +483,7 @@ class AddOffersFrame(ctk.CTkFrame):
             text_color="black",
             command=self._on_start_posting,
         )
-        btn_start.pack(side="left", padx=(0, 10), pady=(0, 10))
+        btn_start.pack(side="right", padx=(10, 0), pady=(0, 10))
 
         self.update_info()
 
@@ -549,10 +551,23 @@ class AddOffersFrame(ctk.CTkFrame):
 
         def _on_regions_selected(regions: list[SelectedRegion]):
             from decimal import Decimal
+            import re
 
             brainrots_detectados: list[BrainrotOCRResult] = []
 
-            for i, region in enumerate(regions, start=1):
+            # Descobre o próximo índice disponível para não sobrescrever imagens já salvas
+            existing_indices: list[int] = []
+            for f in output_dir.glob("brainrot_*.png"):
+                m = re.match(r"brainrot_(\d+)\.png$", f.name)
+                if m:
+                    try:
+                        existing_indices.append(int(m.group(1)))
+                    except ValueError:
+                        pass
+
+            next_index = (max(existing_indices) + 1) if existing_indices else 1
+
+            for region in regions:
                 x1 = int(region.x1)
                 y1 = int(region.y1)
                 x2 = int(region.x2)
@@ -568,7 +583,11 @@ class AddOffersFrame(ctk.CTkFrame):
                     continue
 
                 crop = img_bgr[y1:y2, x1:x2]
-                crop_path = output_dir / f"brainrot_{i}.png"
+
+                # usa sempre o próximo índice livre
+                crop_path = output_dir / f"brainrot_{next_index}.png"
+                next_index += 1
+
                 cv2.imwrite(str(crop_path), crop)
 
                 result = extrair_brainrot(crop_path)
@@ -646,13 +665,13 @@ class AddOffersFrame(ctk.CTkFrame):
 
                 self.update_info()
 
-            # Abre o wizard de revisão (1 brainrot por vez + resumo final)
             BrainrotReviewWindow(
                 master=self.app,
                 brainrots=brainrots_detectados,
                 default_description=self.settings.descricao_padrao,
                 on_done=_on_review_done,
             )
+
 
         # 3) Abre a janela de seleção das regiões na screenshot
         BrainrotSelectionWindow(
@@ -1642,16 +1661,6 @@ class AddManualWindow(ctk.CTkToplevel):
         )
         btn_cancel.pack(side="left", padx=5)
 
-        btn_add = ctk.CTkButton(
-            btn_row,
-            text="Add More",
-            fg_color=PALETTE["accent"],
-            hover_color=PALETTE["accent_hover"],
-            text_color="black",
-            command=self._add_item,
-        )
-        btn_add.pack(side="right", padx=5)
-
         btn_finish = ctk.CTkButton(
             btn_row,
             text="Finish",
@@ -1661,6 +1670,17 @@ class AddManualWindow(ctk.CTkToplevel):
             command=self._finish,
         )
         btn_finish.pack(side="right", padx=5)
+        
+        
+        btn_add = ctk.CTkButton(
+            btn_row,
+            text="Add More",
+            fg_color=PALETTE["accent"],
+            hover_color=PALETTE["accent_hover"],
+            text_color="black",
+            command=self._add_item,
+        )
+        btn_add.pack(side="right", padx=5)
 
     # ------------------------------------------------------------------
     # Helpers

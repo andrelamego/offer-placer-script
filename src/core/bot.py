@@ -30,29 +30,38 @@ from src.core.helpers import (
 # type alias: função que bloqueia até o usuário confirmar o login
 WaitForLoginCallback = Callable[[], None]
 
-def navegar_para_formulario(driver, nome: str):
+def navegar_para_formulario(driver, nome: str, first: bool):
     """
     Fluxo fixo:
     Clicar em 'Sell' > 'Items' > selecionar jogo 'Steal a brainrot' > 'Next'
     Selecionar tipo 'Brainrot' e raridade 'Secret'.
-    TODOS os seletores abaixo precisam ser ajustados com base no HTML real.
+    TODOS os seletores precisam ser ajustados com base no HTML real.
     """
     
-    # Abrir dropdown da conta
-    clicar(
-        driver,
-        By.XPATH,
-        "//div[contains(@class,'profile-picture-container')]//img[contains(@class,'app-image')]",
-        "avatar da conta"
-    )
+    if( first ):
+        # Abrir dropdown da conta
+        clicar(
+            driver,
+            By.XPATH,
+            "//div[contains(@class,'profile-picture-container')]//img[contains(@class,'app-image')]",
+            "avatar da conta"
+        )
 
-    # Clicar em "Sell"
-    clicar(
-        driver,
-        By.XPATH,
-        "//button[@aria-label='Sell']",
-        "botão Sell"
-    )
+        # Clicar em "Sell"
+        clicar(
+            driver,
+            By.XPATH,
+            "//button[@aria-label='Sell']",
+            "botão Sell"
+        )
+    else:
+        # Clilca em "New Offer" para economizar tempo
+        clicar(
+            driver,
+            By.XPATH,
+            "//button[@aria-label='New Offer']",
+            "botão New Offer",
+        )
 
     # Clicar em "Items"
     clicar(
@@ -259,7 +268,7 @@ def preencher_formulario_item(driver, item: ItemInsercao):
     )
 
     # Pequena pausa pra deixar a página processar
-    time.sleep(8)
+    time.sleep(2)
 
 
 def executar_bot(wait_for_login_callback: Optional[WaitForLoginCallback] = None) -> None:
@@ -306,7 +315,9 @@ def executar_bot(wait_for_login_callback: Optional[WaitForLoginCallback] = None)
         total = len(itens)
         for idx, item in enumerate(itens, start=1):
             print(f"\n=== Publicando item {idx}/{total}: {item.titulo} ===")
-            navegar_para_formulario(driver, item.nome)
+            
+            first = True if idx == 1 else False
+            navegar_para_formulario(driver, item.nome, first)
             preencher_formulario_item(driver, item)
 
         log_path = registrar_log_insercao(settings.csv_ativo_path)
